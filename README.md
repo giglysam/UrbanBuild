@@ -8,7 +8,8 @@ AI-assisted urban analysis for planners and architects. Pilot city: **Beirut**. 
 |----------|---------|
 | **Node.js 20+** | Local dev |
 | **Mapbox access token** | Map GL + optional geocoding (`NEXT_PUBLIC_MAPBOX_TOKEN`) |
-| **OpenAI API key** | Site analysis, chat, scenarios, brief (`OPENAI_API_KEY`) |
+| **OpenAI API key** | Site analysis, scenarios, brief (`OPENAI_API_KEY`) |
+| **Created chat API** | Planning Q&A in the Chat tab (default: `https://chat-z.created.app/api/chat`; override with `CREATED_CHAT_API_URL`) |
 | **(Optional) Supabase** | Saved studies — not required for the demo |
 
 Public OSM data uses the **Overpass API** and **Nominatim** (no key). Respect rate limits in production.

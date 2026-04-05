@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { answerPlanningQuestion } from "@/lib/services/ai";
+import { answerPlanningQuestionCreated } from "@/lib/services/created-chat";
 import { siteContextSchema } from "@/lib/types/analysis";
 
 const bodySchema = z.object({
@@ -11,15 +11,9 @@ const bodySchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: "OPENAI_API_KEY is not configured." },
-        { status: 503 },
-      );
-    }
     const json = await req.json();
     const { context, question, priorSummary } = bodySchema.parse(json);
-    const reply = await answerPlanningQuestion(
+    const reply = await answerPlanningQuestionCreated(
       context,
       question,
       priorSummary,

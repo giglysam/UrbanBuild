@@ -23,7 +23,7 @@ export async function nominatimSearch(
     headers: {
       "User-Agent": "UrbanBuildMVP/1.0 (urban planning demo)",
     },
-    next: { revalidate: 0 },
+    cache: "no-store",
   });
   if (!res.ok) throw new Error(`Nominatim ${res.status}`);
   const data = (await res.json()) as {
@@ -44,7 +44,7 @@ export async function mapboxForwardGeocode(
 ): Promise<GeocodeResult[]> {
   const q = encodeURIComponent(query.trim());
   const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${q}.json?access_token=${token}&proximity=35.5018,33.8938&country=LB&limit=6`;
-  const res = await fetch(url, { next: { revalidate: 0 } });
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`Mapbox geocode ${res.status}`);
   const data = (await res.json()) as {
     features: {

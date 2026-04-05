@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+
+export const maxDuration = 60;
 import { generatePlanningBrief } from "@/lib/services/ai";
 import {
   fullAnalysisSchema,

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+
+export const maxDuration = 60;
 import { answerPlanningQuestionCreated } from "@/lib/services/created-chat";
 import { siteContextSchema } from "@/lib/types/analysis";
 

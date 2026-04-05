@@ -29,6 +29,19 @@ Open [http://localhost:3000](http://localhost:3000).
 
 See `.env.example` for `NEXT_PUBLIC_MAPBOX_TOKEN`, `OPENAI_API_KEY`, and optional Supabase URLs.
 
+## Deploy on Vercel
+
+1. Import the GitHub repo in [Vercel](https://vercel.com/new) (framework: **Next.js** is auto-detected).
+2. Add environment variables in the project settings (same names as `.env.example`):
+   - **`NEXT_PUBLIC_MAPBOX_TOKEN`** — required for the map (public).
+   - **`OPENAI_API_KEY`** — server-only; needed for analysis, scenarios, and planning brief.
+   - **`CREATED_CHAT_API_URL`** — optional; defaults to the Created chat endpoint for the Chat tab.
+3. **Build:** Vercel runs `npm run build`, which uses **webpack** (`next build --webpack`) so **Mapbox GL** bundles correctly.
+4. **Node:** The app targets **Node 20+** (`engines` in `package.json`). Vercel’s default 20.x is fine.
+5. **Function duration:** API routes set `maxDuration` up to **60s** for Overpass + AI. On the **Hobby** plan, serverless functions are capped at **10s**, so heavy “Run AI analysis” or slow Overpass calls may time out. Use **Vercel Pro** (or reduce study radius) for reliable production use.
+
+External services (Overpass, Nominatim, Mapbox, OpenAI, Created chat) are called from **serverless routes** only — no extra CORS configuration on Vercel.
+
 ## Scripts
 
 - `npm run dev` — development server  

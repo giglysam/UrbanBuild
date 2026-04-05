@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+
+export const maxDuration = 30;
 import { mapboxForwardGeocode, nominatimSearch } from "@/lib/services/geocode";
 
 const querySchema = z.object({

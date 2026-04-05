@@ -18,7 +18,7 @@ const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 
 function buildQuery(bboxStr: string) {
   return `
-[out:json][timeout:45];
+[out:json][timeout:25];
 (
   way["highway"](${bboxStr});
   way["building"](${bboxStr});
@@ -61,8 +61,9 @@ export async function fetchOverpassForSite(
         body: `data=${encodeURIComponent(q)}`,
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "UrbanBuild/1.0 (Next.js; OSM planning demo)",
         },
-        next: { revalidate: 0 },
+        cache: "no-store",
       });
       if (res.status === 429 || res.status >= 500) {
         await sleep(2000 * (attempt + 1));

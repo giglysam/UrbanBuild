@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+
+export const maxDuration = 60;
 import { featureSummaryFromElements } from "@/lib/geo/indicators";
 import { computeSiteIndicators } from "@/lib/geo/indicators";
 import { overpassToGeoJSON } from "@/lib/geo/osm-to-geojson";

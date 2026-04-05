@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+
+/** Vercel: allow Overpass + Turf work on Pro; Hobby caps at 10s. */
+export const maxDuration = 60;
 import {
   computeSiteIndicators,
   featureSummaryFromElements,

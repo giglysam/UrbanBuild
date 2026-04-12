@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="UrbanBuild — AI-assisted, map-grounded urban planning analysis for Beirut. OSM context, indicators, scenarios, and confidence-tagged insights."
+    />
+    <meta name="keywords" content="urban planning, Beirut, GIS, OpenStreetMap, AI, Mapbox, planning brief" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>UrbanBuild — Beirut urban planning MVP</title>
+    <!-- Replace og:url with your production URL when you deploy (e.g. https://your-app.vercel.app) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="UrbanBuild — Beirut urban planning MVP" />
+    <meta
+      property="og:description"
+      content="Site-aware urban analysis: map context, OSM indicators, AI scenarios, planning brief export."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="UrbanBuild — Beirut MVP" />
+    <meta
+      name="twitter:description"
+      content="AI-assisted urban planning workspace for Beirut — map, metrics, chat, brief."
+    />
+    <link rel="canonical" href="/" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fafafa;
+        --fg: #0f172a;
+        --muted: #64748b;
+        --accent: #1e3a5f;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0a0a0a;
+          --fg: #f1f5f9;
+          --muted: #94a3b8;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        line-height: 1.6;
+      }
+      main {
+        max-width: 36rem;
+        text-align: center;
+      }
+      h1 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        margin: 0 0 0.75rem;
+      }
+      p {
+        margin: 0 0 1.25rem;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+      a.button {
+        display: inline-block;
+        background: var(--accent);
+        color: #fff;
+        text-decoration: none;
+        padding: 0.65rem 1.25rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+      a.button:hover {
+        filter: brightness(1.08);
+      }
+      footer {
+        margin-top: 2rem;
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+      code {
+        font-size: 0.8em;
+        background: color-mix(in oklab, var(--fg) 8%, transparent);
+        padding: 0.15em 0.4em;
+        border-radius: 0.25rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>UrbanBuild</h1>
+      <p>
+        Beirut pilot — interactive map, OpenStreetMap-derived indicators, AI analysis, scenarios, and planning
+        brief export. This file is a static entry in <code>public/</code>; the live app runs at the root path.
+      </p>
+      <p>
+        <a class="button" href="/">Open planner app</a>
+      </p>
+      <footer>
+        Mapbox and API keys belong in environment variables only — never in this repo.
+      </footer>
+    </main>
+  </body>
+</html>

@@ -29,6 +29,13 @@ Open [http://localhost:3000](http://localhost:3000).
 
 See `.env.example` for `NEXT_PUBLIC_MAPBOX_TOKEN`, `OPENAI_API_KEY`, and optional Supabase URLs.
 
+- **`NEXT_PUBLIC_SITE_URL`** — Your production origin (e.g. `https://your-app.vercel.app`) for canonical URLs and Open Graph `metadataBase`. Optional locally; set on Vercel.
+- **Secrets:** Never commit Mapbox tokens or API keys. If a token was shared in chat or committed by mistake, **rotate it** in the [Mapbox account](https://account.mapbox.com/) and update Vercel / `.env.local` only.
+
+### Static `public/index.html`
+
+This repo includes **`public/index.html`** for a simple publish-facing landing stub at **`/index.html`** (Vite/Remix-style layout). The main product still lives at **`/`** (Next.js App Router). Update the Open Graph comment in that file with your real domain if you rely on it for sharing.
+
 ## Deploy on Vercel
 
 1. Import the GitHub repo in [Vercel](https://vercel.com/new) (framework: **Next.js** is auto-detected).

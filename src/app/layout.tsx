@@ -1,74 +1,38 @@
 import type { Metadata } from "next";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
+
+import { getServerEnv } from "@/env/server";
 import "./globals.css";
 
-const geistSans = Geist({
+const inter = Inter({
+  subsets: ["latin"],
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const jetbrains = JetBrains_Mono({
+  subsets: ["latin"],
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  display: "swap",
 });
 
-const siteName = "UrbanBuild";
-const title = {
-  default: `${siteName} — Beirut urban planning MVP`,
-  template: `%s · ${siteName}`,
-};
-
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "http://localhost:3000");
+const siteUrl = getServerEnv().NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title,
+  title: {
+    default: "UrbanBuild — AI-assisted urban planning",
+    template: "%s · UrbanBuild",
+  },
   description:
-    "AI-assisted, map-grounded urban analysis for Beirut. OSM context, heuristic indicators, scenario cards, planning Q&A, and exportable briefs — with observed / inferred / speculative labels.",
-  applicationName: siteName,
-  keywords: [
-    "urban planning",
-    "Beirut",
-    "OpenStreetMap",
-    "GIS",
-    "planning brief",
-    "Mapbox",
-    "walkability",
-  ],
-  authors: [{ name: "UrbanBuild" }],
-  openGraph: {
-    type: "website",
-    siteName,
-    title: title.default,
-    description:
-      "Site-aware urban intelligence for planners: map study areas, pull OSM context, run AI analysis, generate scenarios.",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: title.default,
-    description:
-      "Beirut MVP — map, metrics, AI insights, and planning brief export.",
-  },
-  robots: { index: true, follow: true },
+    "Urban planning and design workspace: OSM site intelligence, structured AI analysis, planning briefs, scenarios, and exports.",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="flex min-h-full flex-col">
-        <TooltipProvider>{children}</TooltipProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.variable} ${jetbrains.variable} min-h-dvh font-sans`}>
+        {children}
       </body>
     </html>
   );

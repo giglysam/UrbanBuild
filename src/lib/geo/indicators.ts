@@ -1,257 +1,136 @@
 import * as turf from "@turf/turf";
-import type { UrbanIndicators } from "@/lib/types/analysis";
-import {
-  fetchOverpassForSite,
-  minDistanceToCoastlineM,
-  type OverpassElement,
-  wayLengthM,
-} from "@/lib/services/overpass";
+import type { Feature, FeatureCollection, Polygon } from "geojson";
 
-const MAJOR_HIGHWAY = new Set([
-  "motorway",
-  "trunk",
-  "primary",
-  "secondary",
-]);
+export type OverpassElement = {
+  type: "node" | "way" | "relation";
+  id: number;
+  lat?: number;
+  lon?: number;
+  center?: { lat: number; lon: number };
+  tags?: Record<string, string>;
+};
 
-function isMajorHighway(tags?: Record<string, string>) {
-  const h = tags?.highway;
-  return h ? MAJOR_HIGHWAY.has(h) : false;
-}
+export type OverpassResponse = {
+  elements: OverpassElement[];
+  remark?: string;
+};
 
-function countSchools(elements: OverpassElement[]) {
-  let n = 0;
-  for (const el of elements) {
-    if (el.tags?.amenity === "school") n += 1;
+/** Build a circular study polygon (approximate geodesic circle as Turf ellipse on local tangent plane). */
+export function studyPolygon(lat: number, lng: number, radiusM: number): Feature<Polygon> {
+  const steps = 64;
+  const coords: [number, number][] = [];
+  const latRad = (lat * Math.PI) / 180;
+  const metersPerDegLat = 111_320;
+  const metersPerDegLng = Math.max(1, 111_320 * Math.cos(latRad));
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * Math.PI * 2;
+    const dx = (radiusM * Math.cos(t)) / metersPerDegLng;
+    const dy = (radiusM * Math.sin(t)) / metersPerDegLat;
+    coords.push([lng + dx, lat + dy]);
   }
-  return n;
+  return turf.polygon([coords]);
 }
 
-function countHospitals(elements: OverpassElement[]) {
-  let n = 0;
-  for (const el of elements) {
-    const a = el.tags?.amenity;
-    if (a === "hospital" || a === "clinic" || a === "doctors") n += 1;
+function coordsFromElement(el: OverpassElement): [number, number] | null {
+  if (typeof el.lat === "number" && typeof el.lon === "number") {
+    return [el.lon, el.lat];
   }
-  return n;
-}
-
-function countParks(elements: OverpassElement[]) {
-  let n = 0;
-  for (const el of elements) {
-    if (el.tags?.leisure === "park" || el.tags?.leisure === "garden") n += 1;
+  if (el.center) {
+    return [el.center.lon, el.center.lat];
   }
-  return n;
+  return null;
 }
 
-function countTransit(elements: OverpassElement[]) {
-  let n = 0;
-  for (const el of elements) {
-    if (el.type !== "node") continue;
-    if (el.tags?.public_transport === "stop_position") n += 1;
-    if (el.tags?.railway === "tram_stop") n += 1;
-    if (el.tags?.highway === "bus_stop") n += 1;
-    if (el.tags?.railway === "station") n += 1;
-  }
-  return n;
+function tag(el: OverpassElement, k: string): string | undefined {
+  return el.tags?.[k];
 }
 
-function countShops(elements: OverpassElement[]) {
-  let n = 0;
-  for (const el of elements) {
-    if (el.type !== "node") continue;
-    if (el.tags?.shop) n += 1;
-  }
-  return n;
-}
-
-function countAmenities(elements: OverpassElement[]) {
-  let n = 0;
-  for (const el of elements) {
-    if (el.type !== "node" && el.type !== "way") continue;
-    if (el.tags?.amenity) n += 1;
-  }
-  return n;
-}
-
-function intersectionProxyCount(elements: OverpassElement[]) {
-  let n = 0;
-  for (const el of elements) {
-    if (el.type !== "node") continue;
-    const h = el.tags?.highway;
-    if (
-      h === "traffic_signals" ||
-      h === "stop" ||
-      h === "motorway_junction" ||
-      h === "crossing"
-    ) {
-      n += 1;
-    }
-  }
-  return n;
-}
-
-function majorRoadsNearStudy(
-  elements: OverpassElement[],
-  lng: number,
+export function computeIndicators(
   lat: number,
-  radiusM: number,
-) {
-  const center = turf.point([lng, lat]);
-  let n = 0;
-  for (const el of elements) {
-    if (el.type !== "way" || !isMajorHighway(el.tags)) continue;
-    if (!el.geometry?.length) continue;
-    for (const g of el.geometry) {
-      const d =
-        turf.distance(center, turf.point([g.lon, g.lat]), {
-          units: "kilometers",
-        }) * 1000;
-      if (d <= radiusM) {
-        n += 1;
-        break;
-      }
-    }
-  }
-  return n;
-}
-
-function coastlineInStudy(
-  coastlineWays: OverpassElement[],
   lng: number,
-  lat: number,
   radiusM: number,
-) {
-  const circle = turf.circle([lng, lat], radiusM / 1000, {
-    units: "kilometers",
-    steps: 24,
-  });
-  for (const w of coastlineWays) {
-    if (!w.geometry?.length) continue;
-    const coords = w.geometry.map((g) => [g.lon, g.lat] as [number, number]);
-    const line = turf.lineString(coords);
-    const inter = turf.lineIntersect(line, circle);
-    if (inter.features.length > 0) return true;
+  overpass: OverpassResponse,
+): {
+  indicators: Record<string, number | string>;
+  featureCollection: FeatureCollection;
+  stats: {
+    buildingWays: number;
+    highwayWays: number;
+    parkLike: number;
+    amenityNodes: number;
+  };
+} {
+  const study = studyPolygon(lat, lng, radiusM);
+  const studyAreaKm2 = turf.area(study) / 1_000_000;
+
+  const features: Feature[] = [];
+  let buildingWays = 0;
+  let highwayWays = 0;
+  let parkLike = 0;
+  let amenityNodes = 0;
+
+  for (const el of overpass.elements) {
+    const c = coordsFromElement(el);
+    if (!c) continue;
+    const pt = turf.point(c);
+    if (!turf.booleanPointInPolygon(pt, study)) continue;
+
+    const t = el.tags ?? {};
+    const kind =
+      t.building || t["building:part"]
+        ? "building"
+        : t.highway
+          ? "highway"
+          : t.leisure === "park" ||
+              t.landuse === "recreation_ground" ||
+              t.natural === "wood"
+            ? "park_like"
+            : t.amenity
+              ? "amenity"
+              : "other";
+
+    if (kind === "building") buildingWays += 1;
+    if (kind === "highway") highwayWays += 1;
+    if (kind === "park_like") parkLike += 1;
+    if (kind === "amenity") amenityNodes += 1;
+
+    features.push({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: c },
+      properties: {
+        osmType: el.type,
+        osmId: el.id,
+        kind,
+        name: tag(el, "name"),
+        ...t,
+      },
+    });
   }
-  return false;
-}
 
-export async function computeSiteIndicators(
-  lng: number,
-  lat: number,
-  radiusM: number,
-): Promise<{ indicators: UrbanIndicators; elements: OverpassElement[] }> {
-  const data = await fetchOverpassForSite(lng, lat, radiusM);
-  const elements = data.elements ?? [];
+  const density = studyAreaKm2 > 0 ? buildingWays / studyAreaKm2 : 0;
 
-  const areaKm2 =
-    Math.PI * Math.pow(radiusM / 1000, 2) || 1;
-
-  let roadLengthM = 0;
-  let buildingCount = 0;
-  const coastlineWays = elements.filter(
-    (e) => e.type === "way" && e.tags?.natural === "coastline",
-  );
-
-  for (const el of elements) {
-    if (el.type === "way" && el.tags?.highway) {
-      roadLengthM += wayLengthM(el);
-    }
-    if (el.type === "way" && el.tags?.building) {
-      buildingCount += 1;
-    }
-  }
-
-  const schoolCount = countSchools(elements);
-  const hospitalCount = countHospitals(elements);
-  const parkLeisureCount = countParks(elements);
-  const transitStopCount = countTransit(elements);
-  const shopCount = countShops(elements);
-  const amenityCount = countAmenities(elements);
-  const ix = intersectionProxyCount(elements);
-
-  const coastlineDistanceM = minDistanceToCoastlineM(
-    lng,
-    lat,
-    coastlineWays,
-  );
-  const coastPresent = coastlineInStudy(coastlineWays, lng, lat, radiusM);
-
-  const roadDensity = roadLengthM / 1000 / areaKm2;
-  const buildingDensity = buildingCount / areaKm2;
-
-  const amenityRichness = Math.min(
-    100,
-    (amenityCount + shopCount * 0.7) / (areaKm2 * 8),
-  );
-  const connectivityProxy = Math.min(
-    100,
-    (ix * 6 + roadDensity * 2 + transitStopCount * 4) / (areaKm2 + 0.5),
-  );
-  const urbanIntensityProxy = Math.min(
-    100,
-    buildingDensity * 1.2 + roadDensity * 1.5,
-  );
-  const mixedUseProxy = Math.min(
-    100,
-    (shopCount + amenityCount * 0.35) / (buildingCount + 5),
-  );
-  const publicSpaceAccessProxy = Math.min(
-    100,
-    (parkLeisureCount * 10 + (coastPresent ? 15 : 0)) / (areaKm2 + 0.3),
-  );
-  const environmentalStressProxy = Math.min(
-    100,
-    majorRoadsNearStudy(elements, lng, lat, radiusM) * 4 +
-      roadDensity * 3 -
-      parkLeisureCount * 2,
-  );
-
-  const indicators: UrbanIndicators = {
-    studyRadiusM: radiusM,
-    roadLengthM: Math.round(roadLengthM),
-    buildingCount,
-    intersectionProxy: ix,
-    amenityCount,
-    shopCount,
-    schoolCount,
-    hospitalCount,
-    parkLeisureCount,
-    transitStopCount,
-    coastlineDistanceM:
-      coastlineDistanceM !== null
-        ? Math.round(coastlineDistanceM)
-        : null,
-    amenityRichness: Math.round(amenityRichness * 10) / 10,
-    connectivityProxy: Math.round(connectivityProxy * 10) / 10,
-    urbanIntensityProxy: Math.round(urbanIntensityProxy * 10) / 10,
-    mixedUseProxy: Math.round(mixedUseProxy * 10) / 10,
-    publicSpaceAccessProxy: Math.round(publicSpaceAccessProxy * 10) / 10,
-    environmentalStressProxy: Math.round(environmentalStressProxy * 10) / 10,
-    dataNotes: [
-      "Indicators are derived from OpenStreetMap within the study radius; completeness varies by area.",
-      "Land use is not official zoning — provisional interpretation from OSM tags and density heuristics.",
-    ],
+  const indicators: Record<string, number | string> = {
+    study_radius_m: radiusM,
+    study_area_km2: Number(studyAreaKm2.toFixed(3)),
+    osm_building_features_in_buffer: buildingWays,
+    osm_highway_features_in_buffer: highwayWays,
+    osm_park_like_features_in_buffer: parkLike,
+    osm_amenity_nodes_in_buffer: amenityNodes,
+    building_density_proxy_per_km2: Number(density.toFixed(1)),
+    data_basis: "OpenStreetMap (community tags; not official zoning)",
   };
 
   return {
     indicators,
-    elements,
+    featureCollection: { type: "FeatureCollection", features },
+    stats: { buildingWays, highwayWays, parkLike, amenityNodes },
   };
 }
 
-export function featureSummaryFromElements(
-  elements: OverpassElement[],
-  lng: number,
-  lat: number,
-  radiusM: number,
-) {
-  const coastlineWays = elements.filter(
-    (e) => e.type === "way" && e.tags?.natural === "coastline",
-  );
-  return {
-    majorRoadsNear: majorRoadsNearStudy(elements, lng, lat, radiusM),
-    greenLeisureFeatures: countParks(elements),
-    coastlineInStudy: coastlineInStudy(coastlineWays, lng, lat, radiusM),
-  };
+/** Heuristic ring area for Beirut pilot (coastal band). Not authoritative. */
+export function beirutContextNote(lat: number, lng: number): string {
+  const coast = lng > 35.48 && lng < 35.55 && lat > 33.85 && lat < 33.95;
+  return coast
+    ? "Pilot area overlaps the Beirut coastal corridor; OSM completeness varies by district."
+    : "Study centroid is outside the dense Beirut core; OSM coverage may be sparse.";
 }

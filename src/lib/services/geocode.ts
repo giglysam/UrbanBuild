@@ -1,60 +1,65 @@
-export type GeocodeResult = {
-  lat: number;
-  lng: number;
-  displayName: string;
-};
+import { getServerEnv } from "@/env/server";
+import { geocodeResultSchema, type GeocodeResult } from "@/lib/types/planning";
 
-const NOMINATIM = "https://nominatim.openstreetmap.org/search";
-
-export async function nominatimSearch(
-  query: string,
-  options?: { limit?: number },
-): Promise<GeocodeResult[]> {
-  const q = query.trim();
-  if (!q) return [];
-  const params = new URLSearchParams({
-    q: `${q}, Beirut, Lebanon`,
-    format: "json",
-    limit: String(options?.limit ?? 6),
-    addressdetails: "1",
-  });
-  const url = `${NOMINATIM}?${params.toString()}`;
-  const res = await fetch(url, {
+async function nominatimSearch(q: string): Promise<GeocodeResult | null> {
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("q", q);
+  const res = await fetch(url.toString(), {
     headers: {
-      "User-Agent": "UrbanBuildMVP/1.0 (urban planning demo)",
+      "User-Agent": "UrbanBuild/0.1 (urban planning pilot; contact: local dev)",
+      Accept: "application/json",
     },
-    cache: "no-store",
+    next: { revalidate: 0 },
   });
-  if (!res.ok) throw new Error(`Nominatim ${res.status}`);
-  const data = (await res.json()) as {
-    lat: string;
-    lon: string;
-    display_name: string;
-  }[];
-  return data.map((r) => ({
-    lat: parseFloat(r.lat),
-    lng: parseFloat(r.lon),
-    displayName: r.display_name,
-  }));
+  if (!res.ok) return null;
+  const data = (await res.json()) as { lat: string; lon: string; display_name: string }[];
+  const hit = data[0];
+  if (!hit) return null;
+  return geocodeResultSchema.parse({
+    lat: Number(hit.lat),
+    lng: Number(hit.lon),
+    label: hit.display_name,
+    source: "nominatim",
+  });
 }
 
-export async function mapboxForwardGeocode(
-  query: string,
-  token: string,
-): Promise<GeocodeResult[]> {
-  const q = encodeURIComponent(query.trim());
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${q}.json?access_token=${token}&proximity=35.5018,33.8938&country=LB&limit=6`;
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Mapbox geocode ${res.status}`);
+async function mapboxForward(q: string, token: string): Promise<GeocodeResult | null> {
+  const url = new URL(
+    `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`,
+  );
+  url.searchParams.set("access_token", token);
+  url.searchParams.set("limit", "1");
+  const res = await fetch(url.toString(), { next: { revalidate: 0 } });
+  if (!res.ok) return null;
   const data = (await res.json()) as {
-    features: {
-      center: [number, number];
-      place_name: string;
-    }[];
+    features?: { center: [number, number]; place_name: string }[];
   };
-  return (data.features ?? []).map((f) => ({
-    lng: f.center[0],
+  const f = data.features?.[0];
+  if (!f) return null;
+  return geocodeResultSchema.parse({
     lat: f.center[1],
-    displayName: f.place_name,
-  }));
+    lng: f.center[0],
+    label: f.place_name,
+    source: "mapbox",
+  });
+}
+
+export async function forwardGeocode(q: string): Promise<GeocodeResult> {
+  const trimmed = q.trim();
+  if (!trimmed) {
+    throw new Error("Query is empty");
+  }
+
+  const mapboxToken = getServerEnv().NEXT_PUBLIC_MAPBOX_TOKEN;
+  if (mapboxToken) {
+    const mb = await mapboxForward(trimmed, mapboxToken);
+    if (mb) return mb;
+  }
+
+  const nom = await nominatimSearch(trimmed);
+  if (nom) return nom;
+
+  throw new Error("No geocoding results");
 }

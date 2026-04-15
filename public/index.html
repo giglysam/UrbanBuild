@@ -1,72 +1,62 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UrbanBuild — Beirut urban planning</title>
     <meta
       name="description"
-      content="UrbanBuild — AI-assisted, map-grounded urban planning analysis for Beirut. OSM context, indicators, scenarios, and confidence-tagged insights."
+      content="UrbanBuild: AI-assisted urban analysis for planners. Beirut pilot. OSM context, indicators, and structured insights — not official zoning."
     />
-    <meta name="keywords" content="urban planning, Beirut, GIS, OpenStreetMap, AI, Mapbox, planning brief" />
-    <meta name="theme-color" content="#0f172a" />
-    <title>UrbanBuild — Beirut urban planning MVP</title>
-    <!-- Replace og:url with your production URL when you deploy (e.g. https://your-app.vercel.app) -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="UrbanBuild — Beirut urban planning MVP" />
-    <meta
-      property="og:description"
-      content="Site-aware urban analysis: map context, OSM indicators, AI scenarios, planning brief export."
-    />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="UrbanBuild — Beirut MVP" />
-    <meta
-      name="twitter:description"
-      content="AI-assisted urban planning workspace for Beirut — map, metrics, chat, brief."
-    />
-    <link rel="canonical" href="/" />
     <style>
       :root {
         color-scheme: light dark;
-        --bg: #fafafa;
-        --fg: #0f172a;
-        --muted: #64748b;
-        --accent: #1e3a5f;
+        --bg: #f4f4f5;
+        --fg: #18181b;
+        --card: #ffffff;
+        --border: #e4e4e7;
+        --accent: #1d4ed8;
+        --muted: #71717a;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #0a0a0a;
-          --fg: #f1f5f9;
-          --muted: #94a3b8;
+          --bg: #09090b;
+          --fg: #fafafa;
+          --card: #18181b;
+          --border: #27272a;
+          --accent: #60a5fa;
+          --muted: #a1a1aa;
         }
-      }
-      * {
-        box-sizing: border-box;
       }
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-        background: var(--bg);
-        color: var(--fg);
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 2rem;
-        line-height: 1.6;
+        background: var(--bg);
+        color: var(--fg);
+        padding: 1.5rem;
       }
-      main {
-        max-width: 36rem;
-        text-align: center;
+      .card {
+        max-width: 28rem;
+        width: 100%;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.06);
       }
       h1 {
+        margin: 0 0 0.5rem;
         font-size: 1.5rem;
-        font-weight: 600;
+        font-weight: 650;
         letter-spacing: -0.02em;
-        margin: 0 0 0.75rem;
       }
       p {
         margin: 0 0 1.25rem;
+        line-height: 1.55;
         color: var(--muted);
         font-size: 0.95rem;
       }
@@ -75,40 +65,30 @@
         background: var(--accent);
         color: #fff;
         text-decoration: none;
-        padding: 0.65rem 1.25rem;
-        border-radius: 0.5rem;
+        font-weight: 600;
         font-size: 0.9rem;
-        font-weight: 500;
+        padding: 0.65rem 1.25rem;
+        border-radius: 8px;
       }
       a.button:hover {
-        filter: brightness(1.08);
+        filter: brightness(1.05);
       }
-      footer {
-        margin-top: 2rem;
+      .fine {
+        margin-top: 1.25rem;
         font-size: 0.75rem;
         color: var(--muted);
-      }
-      code {
-        font-size: 0.8em;
-        background: color-mix(in oklab, var(--fg) 8%, transparent);
-        padding: 0.15em 0.4em;
-        border-radius: 0.25rem;
       }
     </style>
   </head>
   <body>
-    <main>
+    <main class="card">
       <h1>UrbanBuild</h1>
       <p>
-        Beirut pilot — interactive map, OpenStreetMap-derived indicators, AI analysis, scenarios, and planning
-        brief export. This file is a static entry in <code>public/</code>; the live app runs at the root path.
+        AI-assisted urban planning and design analysis for the <strong>Beirut</strong> pilot: OpenStreetMap
+        context, heuristic indicators, and structured insights with confidence labels — not municipal zoning.
       </p>
-      <p>
-        <a class="button" href="/">Open planner app</a>
-      </p>
-      <footer>
-        Mapbox and API keys belong in environment variables only — never in this repo.
-      </footer>
+      <p><a class="button" href="/">Open the app</a></p>
+      <p class="fine">Main product: Next.js app at <code>/</code>. This page is a static entry at <code>/index.html</code>.</p>
     </main>
   </body>
 </html>

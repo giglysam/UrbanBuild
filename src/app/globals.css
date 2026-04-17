@@ -1,47 +1,49 @@
 @import "tailwindcss";
 
-/* Full colors in :root + `@theme inline` so Tailwind v4 utilities track runtime changes (see ui.shadcn.com Tailwind v4 theming). */
+/* Premium dark theme — UrbanBuild */
 :root {
   --radius: 0.625rem;
-  --background: hsl(220 15% 89%);
-  --foreground: hsl(222 42% 8%);
-  --card: hsl(220 12% 96%);
-  --card-foreground: hsl(222 42% 8%);
-  --primary: hsl(221 76% 32%);
-  --primary-foreground: hsl(210 40% 98%);
-  --secondary: hsl(220 14% 84%);
-  --secondary-foreground: hsl(222 42% 8%);
-  --muted: hsl(220 12% 81%);
-  --muted-foreground: hsl(220 10% 34%);
-  --accent: hsl(168 68% 27%);
-  --accent-foreground: hsl(210 40% 98%);
-  --destructive: hsl(0 70% 46%);
-  --border: hsl(220 10% 76%);
-  --input: hsl(220 10% 76%);
-  --ring: hsl(221 76% 32%);
+  --background: #0a0a0a;
+  --foreground: #ececec;
+  --card: #111111;
+  --card-foreground: #ececec;
+  --primary: #6b5c6f;
+  --primary-foreground: #faf8fb;
+  --secondary: #171717;
+  --secondary-foreground: #e8e8e8;
+  --muted: #141414;
+  --muted-foreground: #9a9a9a;
+  --accent: #1f1a22;
+  --accent-foreground: #ececec;
+  --destructive: hsl(0 62% 42%);
+  --destructive-foreground: #fafafa;
+  --border: #262626;
+  --input: #262626;
+  --ring: #6b5c6f;
 }
 
 .dark {
-  --background: hsl(224 40% 5%);
-  --foreground: hsl(210 36% 96%);
-  --card: hsl(224 36% 8%);
-  --card-foreground: hsl(210 36% 96%);
-  --primary: hsl(217 82% 54%);
-  --primary-foreground: hsl(222 42% 8%);
-  --secondary: hsl(217 26% 13%);
-  --secondary-foreground: hsl(210 36% 96%);
-  --muted: hsl(217 26% 13%);
-  --muted-foreground: hsl(215 14% 58%);
-  --accent: hsl(168 48% 36%);
-  --accent-foreground: hsl(210 40% 98%);
-  --destructive: hsl(0 56% 40%);
-  --border: hsl(217 26% 16%);
-  --input: hsl(217 26% 16%);
-  --ring: hsl(217 82% 54%);
+  --background: #0a0a0a;
+  --foreground: #ececec;
+  --card: #111111;
+  --card-foreground: #ececec;
+  --primary: #6b5c6f;
+  --primary-foreground: #faf8fb;
+  --secondary: #171717;
+  --secondary-foreground: #e8e8e8;
+  --muted: #141414;
+  --muted-foreground: #9a9a9a;
+  --accent: #1f1a22;
+  --accent-foreground: #ececec;
+  --destructive: hsl(0 58% 38%);
+  --destructive-foreground: #fafafa;
+  --border: #262626;
+  --input: #262626;
+  --ring: #6b5c6f;
 }
 
 @theme inline {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --color-border: var(--border);
   --color-input: var(--input);
@@ -57,11 +59,22 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 @layer base {

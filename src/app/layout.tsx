@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { JetBrains_Mono, Poppins } from "next/font/google";
 
 import { getServerEnv } from "@/env/server";
 import "./globals.css";
 
-const inter = Inter({
+const poppins = Poppins({
   subsets: ["latin"],
-  variable: "--font-geist-sans",
+  variable: "--font-poppins",
+  weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 
@@ -31,7 +32,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${jetbrains.variable} min-h-dvh font-sans`}>
+      <body className={`${poppins.variable} ${jetbrains.variable} min-h-dvh font-sans`}>
         {children}
       </body>
     </html>

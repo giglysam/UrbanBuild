@@ -2,6 +2,7 @@ import { CREATED_CHAT_FETCH_MS, jsonError } from "@/lib/api/http";
 import { requireUserJson } from "@/lib/api/auth-json";
 import { getServerEnv } from "@/env/server";
 import { logError } from "@/lib/logging/logger";
+import { buildCreatedChatPrompt, parseCreatedChatResponse } from "@/lib/services/created-chat-request";
 import { runPlanningChatWithSystem } from "@/lib/services/openai-planning";
 import { buildPlanningChatSystemPrompt } from "@/lib/services/planning-chat-context";
 import { createClient } from "@/lib/supabase/server";
@@ -20,27 +21,6 @@ const chatBodySchema = z.object({
     }),
   ),
 });
-
-function extractReplyFromJson(data: unknown): string | null {
-  if (!data || typeof data !== "object") return null;
-  const o = data as Record<string, unknown>;
-  if (typeof o.reply === "string" && o.reply.trim()) return o.reply;
-  if (typeof o.message === "string" && o.message.trim()) return o.message;
-  const choices = o.choices;
-  if (Array.isArray(choices) && choices[0] && typeof choices[0] === "object") {
-    const c0 = choices[0] as Record<string, unknown>;
-    const msg = c0.message;
-    if (msg && typeof msg === "object") {
-      const content = (msg as Record<string, unknown>).content;
-      if (typeof content === "string") return content;
-    }
-  }
-  const nested = o.data;
-  if (nested && typeof nested === "object") {
-    return extractReplyFromJson(nested);
-  }
-  return null;
-}
 
 export async function GET(req: Request, ctx: { params: Promise<{ projectId: string }> }) {
   const auth = await requireUserJson();
@@ -172,14 +152,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   const createdUrl =
     getServerEnv().CREATED_CHAT_API_URL ?? "https://chat-z.created.app/api/chat";
 
+  const prompt = buildCreatedChatPrompt({
+    system,
+    messages: parsed.data.messages.map((m) => ({ role: m.role, content: m.content })),
+  });
+
   try {
     const upstream = await fetch(createdUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: parsed.data.messages.map((m) => ({ role: m.role, content: m.content })),
-        system,
-      }),
+      body: JSON.stringify({ prompt }),
       signal: AbortSignal.timeout(CREATED_CHAT_FETCH_MS),
     });
 
@@ -190,8 +172,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
       if (contentType.includes("application/json")) {
         try {
           const data = JSON.parse(text) as unknown;
-          const reply = extractReplyFromJson(data);
-          if (reply) {
+          const createdReply = parseCreatedChatResponse(data);
+          if (createdReply) {
+            const reply = createdReply.content;
             const { error: asstErr } = await supabase.from("chat_messages").insert({
               thread_id: threadId,
               role: "assistant",

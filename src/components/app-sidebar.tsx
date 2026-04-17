@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, LayoutDashboard, LogOut, Plus } from "lucide-react";
+import { Building2, Home, LayoutDashboard, LogOut, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
 const nav = [
+  { href: "/", label: "Home", icon: Home },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/projects/new", label: "New project", icon: Plus },
 ];
@@ -24,10 +25,13 @@ export function AppSidebar({ email }: { email?: string }) {
 
   return (
     <aside className="flex w-56 flex-col border-r bg-card/50">
-      <div className="flex items-center gap-2 border-b px-4 py-4">
+      <Link
+        href="/"
+        className="flex items-center gap-2 border-b px-4 py-4 transition-colors hover:bg-muted/50"
+      >
         <Building2 className="size-5 text-primary" aria-hidden />
         <div className="font-semibold tracking-tight">UrbanBuild</div>
-      </div>
+      </Link>
       <nav className="flex flex-1 flex-col gap-1 p-3">
         {nav.map((item) => {
           const Icon = item.icon;

@@ -3,9 +3,10 @@
 import { getClientEnv } from "@/env/client";
 import { Loader2, MapPin, Search, Sparkles } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { SiteAnalysis } from "@/lib/types/planning";
+import { GoogleMapsEmbed } from "@/components/google-maps-embed";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,6 +64,13 @@ export function StudyWorkspace() {
     ],
   );
   const [chatLoading, setChatLoading] = useState(false);
+
+  const [mapView, setMapView] = useState<"mapbox" | "google">("mapbox");
+  const [googleSatellite, setGoogleSatellite] = useState(true);
+
+  useEffect(() => {
+    setMapView(token ? "mapbox" : "google");
+  }, [token]);
 
   const setLocation = useCallback((nextLat: number, nextLng: number) => {
     setLat(nextLat);
@@ -146,29 +154,79 @@ export function StudyWorkspace() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-background md:flex-row">
-      <div className="relative h-[42vh] min-h-[260px] w-full md:h-auto md:min-h-dvh md:flex-1">
-        {!token ? (
-          <div className="flex h-full items-center justify-center bg-muted p-6 text-center text-sm text-muted-foreground">
-            Set <code className="rounded bg-background px-1">NEXT_PUBLIC_MAPBOX_TOKEN</code> in{" "}
-            <code className="rounded bg-background px-1">.env.local</code> to enable the map.
-          </div>
-        ) : (
-          <UrbanMap
-            mapboxToken={token}
-            latitude={lat}
-            longitude={lng}
-            onLocationChange={setLocation}
-          />
-        )}
-        <div className="pointer-events-none absolute left-3 top-3 max-w-[min(100%-1.5rem,20rem)] rounded-lg border bg-card/95 p-3 text-xs shadow backdrop-blur pointer-events-auto">
-          <div className="flex items-center gap-2 font-medium text-foreground">
-            <MapPin className="size-3.5 text-primary" aria-hidden />
-            UrbanBuild — Beirut pilot
-          </div>
-          <p className="mt-1 text-muted-foreground">
-            Click the map to move the study pin. Radius uses OSM features inside the buffer (not legal zoning).
-          </p>
-        </div>
+      <div className="flex min-h-[42vh] w-full flex-col md:min-h-dvh md:flex-1">
+        <Tabs value={mapView} onValueChange={(v) => setMapView(v as "mapbox" | "google")} className="flex flex-1 flex-col">
+          <TabsList className="mx-3 mt-2 grid w-auto max-w-md shrink-0 grid-cols-2 self-center">
+            <TabsTrigger value="mapbox" className="text-xs sm:text-sm">
+              Mapbox
+            </TabsTrigger>
+            <TabsTrigger value="google" className="text-xs sm:text-sm">
+              Google Maps
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="mapbox" className="relative m-0 mt-0 flex min-h-[38vh] flex-1 flex-col data-[state=inactive]:hidden">
+            {!token ? (
+              <div className="flex min-h-[38vh] flex-1 items-center justify-center bg-muted p-6 text-center text-sm text-muted-foreground">
+                Set <code className="rounded bg-background px-1">NEXT_PUBLIC_MAPBOX_TOKEN</code> in{" "}
+                <code className="rounded bg-background px-1">.env.local</code> for the interactive Mapbox map, or use the
+                Google Maps tab.
+              </div>
+            ) : (
+              <UrbanMap
+                mapboxToken={token}
+                latitude={lat}
+                longitude={lng}
+                onLocationChange={setLocation}
+              />
+            )}
+            <div className="pointer-events-none absolute left-3 top-14 max-w-[min(100%-1.5rem,20rem)] rounded-lg border bg-card/95 p-3 text-xs shadow backdrop-blur pointer-events-auto md:top-3">
+              <div className="flex items-center gap-2 font-medium text-foreground">
+                <MapPin className="size-3.5 text-primary" aria-hidden />
+                UrbanBuild — Beirut pilot
+              </div>
+              <p className="mt-1 text-muted-foreground">
+                Click the map to move the study pin. Radius uses OSM features inside the buffer (not legal zoning).
+              </p>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="google" className="m-0 mt-0 flex min-h-[38vh] flex-1 flex-col gap-2 p-3 pt-2 data-[state=inactive]:hidden">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">View</span>
+              <Button
+                type="button"
+                size="sm"
+                variant={googleSatellite ? "default" : "outline"}
+                onClick={() => setGoogleSatellite(true)}
+              >
+                Satellite
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={!googleSatellite ? "default" : "outline"}
+                onClick={() => setGoogleSatellite(false)}
+              >
+                Map
+              </Button>
+            </div>
+            <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-muted shadow-inner">
+              <GoogleMapsEmbed
+                key={`${lat.toFixed(5)}-${lng.toFixed(5)}-${googleSatellite}`}
+                lat={lat}
+                lng={lng}
+                placeLabel={query}
+                satellite={googleSatellite}
+                className="absolute inset-0 h-full w-full min-h-[280px]"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Embedded Google Maps preview (no API key). Center updates when you search or change coordinates in the
+              sidebar.
+            </p>
+          </TabsContent>
+        </Tabs>
       </div>
 
       <aside className="flex w-full flex-col border-t bg-card md:h-dvh md:w-[min(100%,440px)] md:border-l md:border-t-0">

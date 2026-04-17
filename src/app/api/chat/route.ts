@@ -1,5 +1,9 @@
 import { CREATED_CHAT_FETCH_MS, jsonError } from "@/lib/api/http";
 import { getServerEnv } from "@/env/server";
+import {
+  buildCreatedChatPrompt,
+  parseCreatedChatResponse,
+} from "@/lib/services/created-chat-request";
 import { runPlanningChat } from "@/lib/services/openai-planning";
 import { z } from "zod";
 import { NextResponse } from "next/server";
@@ -14,28 +18,6 @@ const chatBodySchema = z.object({
     }),
   ),
 });
-
-/** Best-effort extract assistant text from Created (or similar) JSON responses. */
-function extractReplyFromJson(data: unknown): string | null {
-  if (!data || typeof data !== "object") return null;
-  const o = data as Record<string, unknown>;
-  if (typeof o.reply === "string" && o.reply.trim()) return o.reply;
-  if (typeof o.message === "string" && o.message.trim()) return o.message;
-  const choices = o.choices;
-  if (Array.isArray(choices) && choices[0] && typeof choices[0] === "object") {
-    const c0 = choices[0] as Record<string, unknown>;
-    const msg = c0.message;
-    if (msg && typeof msg === "object") {
-      const content = (msg as Record<string, unknown>).content;
-      if (typeof content === "string") return content;
-    }
-  }
-  const nested = o.data;
-  if (nested && typeof nested === "object") {
-    return extractReplyFromJson(nested);
-  }
-  return null;
-}
 
 export async function POST(req: Request) {
   let json: unknown;
@@ -52,11 +34,13 @@ export async function POST(req: Request) {
   const createdUrl =
     getServerEnv().CREATED_CHAT_API_URL ?? "https://chat-z.created.app/api/chat";
 
+  const prompt = buildCreatedChatPrompt({ messages: parsed.data.messages });
+
   try {
     const upstream = await fetch(createdUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed.data),
+      body: JSON.stringify({ prompt }),
       signal: AbortSignal.timeout(CREATED_CHAT_FETCH_MS),
     });
 
@@ -67,9 +51,9 @@ export async function POST(req: Request) {
       if (contentType.includes("application/json")) {
         try {
           const data = JSON.parse(text) as unknown;
-          const reply = extractReplyFromJson(data);
-          if (reply) {
-            return NextResponse.json({ reply, source: "created" as const });
+          const parsedCreated = parseCreatedChatResponse(data);
+          if (parsedCreated) {
+            return NextResponse.json({ reply: parsedCreated.content, source: "created" as const });
           }
         } catch {
           /* fall through */

@@ -4,7 +4,7 @@ export default async function ProjectChatPage({ params }: { params: Promise<{ pr
   const { projectId } = await params;
   return (
     <div className="p-6">
-      <ProjectChatPanel projectId={projectId} />
+      <ProjectChatPanel key={projectId} projectId={projectId} />
     </div>
   );
 }

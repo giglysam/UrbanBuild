@@ -4,8 +4,9 @@ import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
 
+import { ASSISTANT_RESPONSE_STYLE } from "@/lib/planning/assistant-response-style";
 import { getServerEnv } from "@/env/server";
-import type { SiteAnalysis, SiteIndicators } from "@/lib/types/planning";
+import type { PlanningContext, SiteAnalysis, SiteIndicators } from "@/lib/types/planning";
 
 const briefDocSchema = z.object({
   title: z.string(),
@@ -29,6 +30,7 @@ function getOpenAI() {
 export async function generatePlanningBriefDocument(input: {
   indicators: SiteIndicators;
   priorAnalysis?: SiteAnalysis | null;
+  planningContext?: PlanningContext | null;
   editorNotes?: string;
 }): Promise<PlanningBriefDocument> {
   const client = getOpenAI();
@@ -36,17 +38,21 @@ export async function generatePlanningBriefDocument(input: {
 
   const response = await client.responses.parse({
     model,
-    instructions: `You produce a formal planning brief for practitioners. Do not invent official zoning. Tag uncertainty where needed.`,
+    instructions: `You produce a formal planning brief for practitioners. Do not invent official zoning. Tag uncertainty where needed.
+
+${ASSISTANT_RESPONSE_STYLE}`,
     input: [
       {
         role: "user",
         content: JSON.stringify({
           task: "Create a structured planning brief document with titled sections.",
           indicators: input.indicators,
+          planner_context: input.planningContext ?? null,
           prior_analysis_excerpt: input.priorAnalysis
             ? {
                 insights: input.priorAnalysis.insights.slice(0, 6),
                 scenarios: input.priorAnalysis.scenarios,
+                modules: input.priorAnalysis.modules ?? null,
               }
             : null,
           editor_notes: input.editorNotes ?? null,

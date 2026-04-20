@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { scenarioSchema, studyRequestSchema } from "@/lib/types/planning";
+import { planningContextSchema, scenarioSchema, studyRequestSchema } from "@/lib/types/planning";
 
 describe("studyRequestSchema", () => {
   it("accepts valid study request", () => {
@@ -22,5 +22,27 @@ describe("scenarioSchema", () => {
       confidence: "inferred",
     });
     expect(s.name).toBe("A");
+  });
+});
+
+describe("planningContextSchema", () => {
+  it("accepts empty object", () => {
+    const c = planningContextSchema.parse({});
+    expect(c.budgetLineItems).toBeUndefined();
+  });
+
+  it("parses budget and risk flags", () => {
+    const c = planningContextSchema.parse({
+      budgetTotalUsd: 1_000_000,
+      budgetLineItems: [{ category: "Transit", amountUsd: 400_000, priority: 1 }],
+      riskFlags: { floodProne: true, coastal: true },
+      populationByYear: [
+        { year: 2020, population: 1000 },
+        { year: 2024, population: 1100 },
+      ],
+    });
+    expect(c.budgetLineItems?.[0]?.category).toBe("Transit");
+    expect(c.riskFlags?.floodProne).toBe(true);
+    expect(c.populationByYear?.length).toBe(2);
   });
 });

@@ -2,14 +2,17 @@ import "server-only";
 
 import type { FeatureCollection } from "geojson";
 
+import { planningContextToNotes } from "@/lib/planning/planning-context-notes";
 import { beirutContextNote, computeIndicators } from "@/lib/geo/indicators";
 import { fetchOverpassContext } from "@/lib/services/overpass";
 import { runStructuredSiteAnalysis } from "@/lib/services/openai-planning";
-import type { SiteAnalysis, StudyRequest } from "@/lib/types/planning";
+import type { PlanningContext, PlanningModuleId, SiteAnalysis, StudyRequest } from "@/lib/types/planning";
 
 export type SiteAnalysisInput = StudyRequest & {
   /** Optional GeoJSON Polygon/MultiPolygon for context (not yet used in Overpass disk query). */
   boundaryGeojson?: unknown;
+  planningContext?: PlanningContext | null;
+  moduleFocus?: PlanningModuleId;
 };
 
 export type SiteAnalysisPipelineResult = {
@@ -39,6 +42,7 @@ export async function runSiteAnalysisPipeline(input: SiteAnalysisInput): Promise
     const contextNotes = [
       beirutContextNote(lat, lng),
       overpass.remark ? `Overpass: ${overpass.remark}` : "Overpass query completed.",
+      ...planningContextToNotes(input.planningContext),
     ];
     if (input.boundaryGeojson) {
       contextNotes.push("Study boundary polygon provided (geometry not yet used in OSM disk query).");
@@ -48,6 +52,8 @@ export async function runSiteAnalysisPipeline(input: SiteAnalysisInput): Promise
       indicators,
       contextNotes,
       pilotCity: "Beirut (pilot)",
+      planningContext: input.planningContext ?? null,
+      moduleFocus: input.moduleFocus ?? "all",
     });
 
     return {

@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
 
+import { ASSISTANT_RESPONSE_STYLE } from "@/lib/planning/assistant-response-style";
 import { getServerEnv } from "@/env/server";
 import type { Scenario } from "@/lib/types/planning";
 
@@ -34,7 +35,9 @@ export async function compareScenariosWithLLM(a: Scenario, b: Scenario): Promise
 
   const response = await client.responses.parse({
     model,
-    instructions: `You compare two urban planning scenarios. Be concise and professional. Do not invent zoning law.`,
+    instructions: `You compare two urban planning scenarios. Be concise and professional. Do not invent zoning law.
+
+${ASSISTANT_RESPONSE_STYLE}`,
     input: [
       {
         role: "user",

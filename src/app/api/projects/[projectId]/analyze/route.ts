@@ -3,8 +3,9 @@ import { requireUserJson } from "@/lib/api/auth-json";
 import { jsonError } from "@/lib/api/http";
 import { logError, logInfo, logWarn } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
-import type { Scenario } from "@/lib/types/planning";
+import { planningContextSchema, planningModuleIdSchema, type Scenario } from "@/lib/types/planning";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 export const maxDuration = 60;
 
@@ -15,7 +16,11 @@ async function assertOwner(supabase: Awaited<ReturnType<typeof createClient>>, u
   return "ok" as const;
 }
 
-export async function POST(_req: Request, ctx: { params: Promise<{ projectId: string }> }) {
+const analyzePostBody = z.object({
+  moduleFocus: planningModuleIdSchema.optional(),
+});
+
+export async function POST(req: Request, ctx: { params: Promise<{ projectId: string }> }) {
   const auth = await requireUserJson();
   if (!auth.ok) return auth.response;
   const { projectId } = await ctx.params;
@@ -24,6 +29,29 @@ export async function POST(_req: Request, ctx: { params: Promise<{ projectId: st
   const gate = await assertOwner(supabase, auth.user.id, projectId);
   if (gate === "not_found") return jsonError("Project not found", 404);
   if (gate === "forbidden") return jsonError("Forbidden", 403);
+
+  let moduleFocus: z.infer<typeof planningModuleIdSchema> | undefined;
+  const contentType = req.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    try {
+      const raw = (await req.json()) as unknown;
+      const parsed = analyzePostBody.safeParse(raw);
+      if (parsed.success) {
+        moduleFocus = parsed.data.moduleFocus;
+      }
+    } catch {
+      /* ignore empty body */
+    }
+  }
+
+  const { data: projectRow } = await supabase
+    .from("projects")
+    .select("planning_context")
+    .eq("id", projectId)
+    .maybeSingle();
+
+  const planningContextParsed = planningContextSchema.safeParse(projectRow?.planning_context ?? {});
+  const planningContext = planningContextParsed.success ? planningContextParsed.data : null;
 
   const { data: site, error: siteErr } = await supabase
     .from("project_sites")
@@ -40,6 +68,8 @@ export async function POST(_req: Request, ctx: { params: Promise<{ projectId: st
     lng: site.center_lng,
     radiusM: site.radius_m ?? 400,
     boundaryGeojson: site.boundary_geojson ?? undefined,
+    planningContext,
+    moduleFocus: moduleFocus ?? "all",
   };
 
   const { data: runRow, error: runInsertErr } = await supabase

@@ -6,7 +6,7 @@ import { requireUserJson } from "@/lib/api/auth-json";
 import { jsonError } from "@/lib/api/http";
 import { logError } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
-import { siteAnalysisSchema } from "@/lib/types/planning";
+import { planningContextSchema, siteAnalysisSchema } from "@/lib/types/planning";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -68,6 +68,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   if (gate === "not_found") return jsonError("Project not found", 404);
   if (gate === "forbidden") return jsonError("Forbidden", 403);
 
+  const { data: projRow } = await supabase
+    .from("projects")
+    .select("planning_context")
+    .eq("id", projectId)
+    .maybeSingle();
+  const pcParsed = planningContextSchema.safeParse(projRow?.planning_context ?? {});
+  const planningContext = pcParsed.success ? pcParsed.data : null;
+
   let run: { id: string; result: unknown } | null = null;
   let runErr: { message: string } | null = null;
 
@@ -121,6 +129,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     const doc = await generatePlanningBriefDocument({
       indicators,
       priorAnalysis: analysisParsed.success ? analysisParsed.data : null,
+      planningContext,
       editorNotes: parsed.data.editorNotes,
     });
     const markdown = planningBriefToMarkdown(doc);

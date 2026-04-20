@@ -6,7 +6,7 @@ import { buildCreatedChatPrompt, parseCreatedChatResponse } from "@/lib/services
 import { runPlanningChatWithSystem } from "@/lib/services/openai-planning";
 import { buildPlanningChatSystemPrompt } from "@/lib/services/planning-chat-context";
 import { createClient } from "@/lib/supabase/server";
-import { siteAnalysisSchema } from "@/lib/types/planning";
+import { planningContextSchema, siteAnalysisSchema } from "@/lib/types/planning";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -60,10 +60,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
 }
 
 async function assertOwner(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, projectId: string) {
-  const { data } = await supabase.from("projects").select("owner_id, name").eq("id", projectId).maybeSingle();
+  const { data } = await supabase
+    .from("projects")
+    .select("owner_id, name, planning_context")
+    .eq("id", projectId)
+    .maybeSingle();
   if (!data) return { gate: "not_found" as const, project: null as null };
   if (data.owner_id !== userId) return { gate: "forbidden" as const, project: null as null };
-  return { gate: "ok" as const, project: { name: String(data.name) } };
+  const pcParsed = planningContextSchema.safeParse(data.planning_context ?? {});
+  return {
+    gate: "ok" as const,
+    project: { name: String(data.name), planningContext: pcParsed.success ? pcParsed.data : null },
+  };
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ projectId: string }> }) {
@@ -112,6 +120,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   const system = buildPlanningChatSystemPrompt({
     projectName: project.name,
     siteSummary,
+    planningContext: project.planningContext,
     latestAnalysis,
   });
 

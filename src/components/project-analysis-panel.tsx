@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import type { SiteAnalysis } from "@/lib/types/planning";
@@ -25,7 +26,11 @@ export function ProjectAnalysisPanel({ projectId }: { projectId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/projects/${projectId}/analyze`, { method: "POST" });
+      const res = await fetch(`/api/projects/${projectId}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleFocus: "all" }),
+      });
       const data = (await res.json()) as { analysis?: SiteAnalysis; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Analysis failed");
       if (data.analysis) setAnalysis(data.analysis);
@@ -42,8 +47,8 @@ export function ProjectAnalysisPanel({ projectId }: { projectId: string }) {
         <CardHeader>
           <CardTitle className="text-base">Run AI analysis</CardTitle>
           <CardDescription>
-            Uses your saved site center and radius, Overpass OSM context, and structured OpenAI output. Results are
-            stored on the project.
+            Uses your saved site center and radius, planner context (from Modules), Overpass OSM data, and structured
+            OpenAI output including five planning modules. Results are stored on the project.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
@@ -97,6 +102,43 @@ export function ProjectAnalysisPanel({ projectId }: { projectId: string }) {
             </CardContent>
           </Card>
         </div>
+      ) : null}
+
+      {analysis?.modules ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Planning modules (summary)</CardTitle>
+            <CardDescription>
+              Land use, mobility, green space, budget, and risk — see the{" "}
+              <Link href={`/projects/${projectId}/modules`} className="text-primary underline-offset-4 hover:underline">
+                Modules
+              </Link>{" "}
+              page for full detail.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm md:grid-cols-2">
+            <p>
+              <span className="font-medium">Land use: </span>
+              {analysis.modules.landUse.summary}
+            </p>
+            <p>
+              <span className="font-medium">Traffic & transit: </span>
+              {analysis.modules.trafficTransit.summary}
+            </p>
+            <p>
+              <span className="font-medium">Green space: </span>
+              {analysis.modules.greenSpace.summary}
+            </p>
+            <p>
+              <span className="font-medium">Budget: </span>
+              {analysis.modules.budget.summary}
+            </p>
+            <p className="md:col-span-2">
+              <span className="font-medium">Risk: </span>
+              {analysis.modules.risk.summary}
+            </p>
+          </CardContent>
+        </Card>
       ) : null}
     </div>
   );

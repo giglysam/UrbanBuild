@@ -24,7 +24,20 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 p-6">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Modules</CardTitle>
+            <CardDescription>Planner inputs, five AI modules, charts</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/projects/${projectId}/modules`}>
+                Open modules <ArrowRight className="ml-1 size-3" aria-hidden />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Site</CardTitle>

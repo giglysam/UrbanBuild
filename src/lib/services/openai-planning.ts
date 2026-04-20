@@ -1,10 +1,13 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 
+import { ASSISTANT_RESPONSE_STYLE } from "@/lib/planning/assistant-response-style";
 import { getServerEnv } from "@/env/server";
 import {
-  siteAnalysisSchema,
-  type SiteAnalysis,
+  siteAnalysisWithModulesSchema,
+  type PlanningContext,
+  type PlanningModuleId,
+  type SiteAnalysisWithModules,
   type SiteIndicators,
 } from "@/lib/types/planning";
 
@@ -15,7 +18,23 @@ Rules you MUST follow:
 - Tag every insight with confidence: "observed" (directly from provided metrics or OSM tags), "inferred" (reasonable planning interpretation), or "speculative" (exploratory / scenario).
 - Treat OSM land use and building tags as provisional / community-sourced unless stated otherwise.
 - Prefer concise, actionable language for practicing planners and architects.
-- Output MUST match the provided JSON schema exactly.`;
+- Output MUST match the provided JSON schema exactly.
+- The "modules" object MUST include all five keys: landUse, trafficTransit, greenSpace, budget, risk. Each module must be substantive and actionable.
+
+${ASSISTANT_RESPONSE_STYLE}`;
+
+const MODULE_FOCUS_ADDENDUM: Record<Exclude<PlanningModuleId, "all">, string> = {
+  land_use:
+    "Focus extra depth on the landUse module (zoning mix, land-use efficiency). Keep other modules shorter but still complete.",
+  traffic_transit:
+    "Focus extra depth on the trafficTransit module (streets, access, transit gaps). Keep other modules shorter but still complete.",
+  green_space:
+    "Focus extra depth on the greenSpace module (parks, heat, sustainability). Keep other modules shorter but still complete.",
+  budget:
+    "Focus extra depth on the budget module (prioritization, phasing, tradeoffs). Keep other modules shorter but still complete.",
+  risk:
+    "Focus extra depth on the risk module (hazards, exposure, mitigation). Keep other modules shorter but still complete.",
+};
 
 function getClient() {
   const apiKey = getServerEnv().OPENAI_API_KEY;
@@ -33,13 +52,23 @@ export async function runStructuredSiteAnalysis(input: {
   indicators: SiteIndicators;
   contextNotes: string[];
   pilotCity: string;
-}): Promise<SiteAnalysis> {
+  planningContext?: PlanningContext | null;
+  moduleFocus?: PlanningModuleId;
+}): Promise<SiteAnalysisWithModules> {
   const client = getClient();
   const model = getPlanningModel();
 
+  const focus = input.moduleFocus ?? "all";
+  const focusLine =
+    focus !== "all" ? MODULE_FOCUS_ADDENDUM[focus] : "Balance depth across all five modules.";
+
+  const instructions = `${URBAN_PLANNING_SYSTEM}
+
+Module output emphasis: ${focusLine}`;
+
   const response = await client.responses.parse({
     model,
-    instructions: URBAN_PLANNING_SYSTEM,
+    instructions,
     input: [
       {
         role: "user",
@@ -48,18 +77,21 @@ export async function runStructuredSiteAnalysis(input: {
           pilot_city: input.pilotCity,
           indicators: input.indicators,
           notes: input.contextNotes,
+          planner_context: input.planningContext ?? null,
+          module_focus: focus,
           required_sections: [
             "indicators echo / interpretation",
             "insights (each with confidence)",
             "three contrasting scenarios (design strategies, not legal prescriptions)",
             "short executive planning brief",
             "disclaimers",
+            "modules: landUse, trafficTransit, greenSpace, budget, risk (all required)",
           ],
         }),
       },
     ],
     text: {
-      format: zodTextFormat(siteAnalysisSchema, "site_analysis"),
+      format: zodTextFormat(siteAnalysisWithModulesSchema, "site_analysis"),
     },
   });
 
@@ -74,7 +106,7 @@ export async function runPlanningChat(messages: { role: "user" | "assistant"; co
   return runPlanningChatWithSystem(
     `${URBAN_PLANNING_SYSTEM}
 
-You are answering in a chat. Be concise. If asked for legal/regulatory certainty, decline and point to local sources.`,
+You are answering in a chat. If asked for legal/regulatory certainty, decline and point to local sources.`,
     messages,
   );
 }

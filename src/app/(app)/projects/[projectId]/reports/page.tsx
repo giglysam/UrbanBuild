@@ -19,6 +19,11 @@ export default async function ProjectReportsPage({ params }: { params: Promise<{
             </a>
           </Button>
           <Button asChild variant="outline">
+            <a href={`/api/projects/${projectId}/reports/mapbox-static`} target="_blank" rel="noreferrer">
+              Static map (PNG)
+            </a>
+          </Button>
+          <Button asChild variant="outline">
             <a href={`/api/projects/${projectId}/export`} target="_blank" rel="noreferrer">
               Project JSON
             </a>

@@ -33,6 +33,11 @@ Managed in Supabase: `profiles`, `organizations` / `organization_members` (teams
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/geocode?q=` | Forward geocode (Mapbox / Nominatim) |
+| POST | `/api/mapbox/context` | Build Mapbox data bundle + textual context for AI |
+| POST | `/api/mapbox/command` | AI/heuristic command plan + execute map overlays |
+| GET | `/api/mapbox/search/suggest?q=` | Search Box autocomplete suggestions |
+| GET | `/api/mapbox/search/retrieve?mapboxId=` | Search Box retrieve selected place |
+| POST | `/api/mapbox/matrix` | Travel-time/distance matrix between points |
 | POST | `/api/site-data` | OSM indicators only (no AI) |
 | POST | `/api/analyze` | Legacy anonymous analysis (no persistence) |
 | POST | `/api/chat` | Stateless chat (Created + OpenAI fallback) |
@@ -49,6 +54,7 @@ Managed in Supabase: `profiles`, `organizations` / `organization_members` (teams
 | GET/POST | `/api/projects/[id]/chat` | List threads/messages or send project-aware chat |
 | GET | `/api/projects/[id]/export` | JSON snapshot download |
 | GET | `/api/projects/[id]/reports/planning-brief` | Planning brief PDF |
+| GET | `/api/projects/[id]/reports/mapbox-static` | Static map PNG centered on saved site |
 
 ## How AI analysis works
 
@@ -58,6 +64,15 @@ Managed in Supabase: `profiles`, `organizations` / `organization_members` (teams
 4. Results stored in **`analysis_runs`**; scenarios copied to **`scenarios`** for comparison and preference.
 
 Planning brief **versions** use a dedicated generator in `lib/analysis/generate-planning-brief.ts` and persist markdown in **`planning_briefs`**.
+
+## Mapbox data + AI map control
+
+- The demo workspace now supports **Mapbox command execution**: user text commands are translated into actionable map operations (`show_route`, `show_isochrone`, `show_pois`, `set_style`, etc.).
+- APIs wired for this flow:
+  - `POST /api/mapbox/context` gathers route/isochrone/POI data and compiles **textual context** for AI reasoning.
+  - `POST /api/mapbox/command` builds a command plan (OpenAI when available, heuristic fallback), executes Mapbox actions, and returns overlays + refreshed text context.
+- Data sources are explicit in responses: Geocoding, Directions, Isochrone, and Tilequery.
+- The textual context is designed to be fed to planning/chat prompts so model choices are traceable to map data, not generic assumptions.
 
 ## Setup
 

@@ -149,3 +149,107 @@ export const geocodeResultSchema = z.object({
   source: z.enum(["mapbox", "nominatim"]),
 });
 export type GeocodeResult = z.infer<typeof geocodeResultSchema>;
+
+export const mapboxProfileSchema = z.enum(["driving", "walking", "cycling"]);
+export type MapboxProfile = z.infer<typeof mapboxProfileSchema>;
+
+export const lngLatSchema = z.object({
+  lng: z.number().min(-180).max(180),
+  lat: z.number().min(-90).max(90),
+});
+export type LngLat = z.infer<typeof lngLatSchema>;
+
+export const mapboxPlaceSchema = z.object({
+  name: z.string(),
+  fullAddress: z.string(),
+  point: lngLatSchema,
+});
+export type MapboxPlace = z.infer<typeof mapboxPlaceSchema>;
+
+export const mapboxRouteSchema = z.object({
+  distanceM: z.number().nonnegative(),
+  durationS: z.number().nonnegative(),
+  profile: mapboxProfileSchema,
+  geometry: z.unknown(),
+});
+export type MapboxRoute = z.infer<typeof mapboxRouteSchema>;
+
+export const mapboxIsochroneSchema = z.object({
+  profile: mapboxProfileSchema,
+  contourMinutes: z.array(z.number().int().positive()),
+  geometry: z.unknown(),
+});
+export type MapboxIsochrone = z.infer<typeof mapboxIsochroneSchema>;
+
+export const mapboxPoiFeatureSchema = z.object({
+  name: z.string().optional(),
+  category: z.string().optional(),
+  distanceM: z.number().nonnegative().optional(),
+  point: lngLatSchema,
+});
+export type MapboxPoiFeature = z.infer<typeof mapboxPoiFeatureSchema>;
+
+export const mapboxContextBundleSchema = z.object({
+  center: lngLatSchema,
+  reverseGeocode: mapboxPlaceSchema.optional(),
+  searchResults: z.array(mapboxPlaceSchema),
+  routeToDestination: mapboxRouteSchema.optional(),
+  isochrone: mapboxIsochroneSchema.optional(),
+  nearbyPois: z.array(mapboxPoiFeatureSchema),
+  textualContext: z.string(),
+  sources: z.array(z.string()),
+});
+export type MapboxContextBundle = z.infer<typeof mapboxContextBundleSchema>;
+
+export const mapboxActionSchema = z.enum([
+  "show_route",
+  "show_isochrone",
+  "show_pois",
+  "clear_overlays",
+  "set_center",
+  "set_style",
+]);
+export type MapboxAction = z.infer<typeof mapboxActionSchema>;
+
+export const mapboxStyleSchema = z.enum(["streets-v12", "light-v11", "dark-v11", "satellite-streets-v12"]);
+export type MapboxStyle = z.infer<typeof mapboxStyleSchema>;
+
+export const mapboxCommandPlanSchema = z.object({
+  summary: z.string(),
+  actions: z.array(
+    z.object({
+      type: mapboxActionSchema,
+      reason: z.string(),
+      profile: mapboxProfileSchema.optional(),
+      destination: lngLatSchema.optional(),
+      contourMinutes: z.array(z.number().int().positive()).optional(),
+      style: mapboxStyleSchema.optional(),
+      query: z.string().optional(),
+    }),
+  ),
+  followUpQuestions: z.array(z.string()).max(2).optional(),
+});
+export type MapboxCommandPlan = z.infer<typeof mapboxCommandPlanSchema>;
+
+export const mapboxSearchSuggestItemSchema = z.object({
+  mapboxId: z.string(),
+  name: z.string(),
+  fullAddress: z.string(),
+});
+export type MapboxSearchSuggestItem = z.infer<typeof mapboxSearchSuggestItemSchema>;
+
+export const mapboxSearchRetrieveSchema = z.object({
+  mapboxId: z.string(),
+  name: z.string(),
+  fullAddress: z.string(),
+  point: lngLatSchema,
+});
+export type MapboxSearchRetrieve = z.infer<typeof mapboxSearchRetrieveSchema>;
+
+export const mapboxMatrixCellSchema = z.object({
+  from: z.number().int().nonnegative(),
+  to: z.number().int().nonnegative(),
+  distanceM: z.number().nonnegative().nullable(),
+  durationS: z.number().nonnegative().nullable(),
+});
+export type MapboxMatrixCell = z.infer<typeof mapboxMatrixCellSchema>;

@@ -4,8 +4,8 @@ import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 import { Loader2, Save } from "lucide-react";
 import mapboxgl from "mapbox-gl";
-import { useCallback, useRef, useState } from "react";
-import Map, { Marker, type MapRef } from "react-map-gl/mapbox";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Map, { type MapRef } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { FeatureCollection, Polygon } from "geojson";
 
@@ -32,6 +32,7 @@ export function ProjectSiteEditor({ projectId, initial }: Props) {
   const mapRef = useRef<MapRef>(null);
   const drawRef = useRef<MapboxDraw | null>(null);
   const navControlRef = useRef<mapboxgl.NavigationControl | null>(null);
+  const markerRef = useRef<mapboxgl.Marker | null>(null);
 
   const [lat, setLat] = useState(initial.center_lat ?? 33.8938);
   const [lng, setLng] = useState(initial.center_lng ?? 35.5018);
@@ -59,43 +60,75 @@ export function ProjectSiteEditor({ projectId, initial }: Props) {
       }
       navControlRef.current = null;
     }
+    markerRef.current?.remove();
+    markerRef.current = null;
   }, []);
+
+  const setupMapControls = useCallback(
+    (map: mapboxgl.Map) => {
+      if (!drawRef.current) {
+        const draw = new MapboxDraw({
+          displayControlsDefault: false,
+          controls: { polygon: true, trash: true },
+        });
+        map.addControl(draw, "top-left");
+        drawRef.current = draw;
+
+        if (initial.boundary_geojson && typeof initial.boundary_geojson === "object") {
+          try {
+            draw.add(initial.boundary_geojson as GeoJSON.Feature | GeoJSON.FeatureCollection);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+
+      if (!navControlRef.current) {
+        const nav = new mapboxgl.NavigationControl();
+        map.addControl(nav, "top-right");
+        navControlRef.current = nav;
+      }
+
+      if (!markerRef.current) {
+        markerRef.current = new mapboxgl.Marker({ color: "#1d4ed8" })
+          .setLngLat([lng, lat])
+          .addTo(map);
+      } else {
+        markerRef.current.setLngLat([lng, lat]);
+      }
+
+      setMapReady(true);
+    },
+    [initial.boundary_geojson, lat, lng],
+  );
 
   const onMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
-    if (!map?.getCanvasContainer?.()) return;
+    if (!map) return;
 
-    if (!drawRef.current) {
-      const draw = new MapboxDraw({
-        displayControlsDefault: false,
-        controls: { polygon: true, trash: true },
-      });
-      map.addControl(draw, "top-left");
-      drawRef.current = draw;
+    const run = () => {
+      if (!map.getCanvasContainer?.()) return;
+      setupMapControls(map);
+    };
 
-      if (initial.boundary_geojson && typeof initial.boundary_geojson === "object") {
-        try {
-          draw.add(initial.boundary_geojson as GeoJSON.Feature | GeoJSON.FeatureCollection);
-        } catch {
-          /* ignore */
-        }
-      }
+    if (map.isStyleLoaded()) {
+      run();
+      return;
     }
-
-    if (!navControlRef.current) {
-      const nav = new mapboxgl.NavigationControl();
-      map.addControl(nav, "top-right");
-      navControlRef.current = nav;
-    }
-
-    setMapReady(true);
-  }, [initial.boundary_geojson]);
+    map.once("load", run);
+    map.once("style.load", run);
+  }, [setupMapControls]);
 
   const onMapRemove = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (map) detachMapControls(map);
     setMapReady(false);
   }, [detachMapControls]);
+
+  useEffect(() => {
+    if (!mapReady || !markerRef.current) return;
+    markerRef.current.setLngLat([lng, lat]);
+  }, [mapReady, lng, lat]);
 
   async function save() {
     setSaving(true);
@@ -163,11 +196,7 @@ export function ProjectSiteEditor({ projectId, initial }: Props) {
             setLat(la);
             setLng(ln);
           }}
-        >
-          {mapReady ? (
-            <Marker longitude={lng} latitude={lat} anchor="center" color="#1d4ed8" />
-          ) : null}
-        </Map>
+        />
       </div>
       <Card>
         <CardHeader>

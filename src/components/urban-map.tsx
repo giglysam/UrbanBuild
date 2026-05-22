@@ -3,7 +3,7 @@
 import type { FeatureCollection, GeoJsonProperties, Geometry } from "geojson";
 import mapboxgl from "mapbox-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Map, { Layer, Marker, Source, type MapRef } from "react-map-gl/mapbox";
+import Map, { Layer, Source, type MapRef } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 type UrbanMapProps = {
@@ -18,6 +18,24 @@ type UrbanMapProps = {
   onLocationChange: (lat: number, lng: number) => void;
 };
 
+/** Run callback only when Mapbox has a style and canvas (avoids getCanvasContainer().appendChild errors). */
+function whenMapStyleReady(map: mapboxgl.Map, onReady: () => void): () => void {
+  const run = () => {
+    if (!map.getCanvasContainer?.()) return;
+    onReady();
+  };
+  if (map.isStyleLoaded()) {
+    run();
+    return () => {};
+  }
+  map.once("load", run);
+  map.once("style.load", run);
+  return () => {
+    map.off("load", run);
+    map.off("style.load", run);
+  };
+}
+
 export function UrbanMap({
   mapboxToken,
   latitude,
@@ -31,6 +49,8 @@ export function UrbanMap({
 }: UrbanMapProps) {
   const mapRef = useRef<MapRef>(null);
   const navControlRef = useRef<mapboxgl.NavigationControl | null>(null);
+  const markerRef = useRef<mapboxgl.Marker | null>(null);
+  const styleReadyCleanupRef = useRef<(() => void) | null>(null);
   const [mapReady, setMapReady] = useState(false);
 
   const routeData = useMemo(() => coerceFeatureCollection(routeGeojson), [routeGeojson]);
@@ -47,34 +67,61 @@ export function UrbanMap({
     navControlRef.current = null;
   }, []);
 
+  const removeMarker = useCallback(() => {
+    markerRef.current?.remove();
+    markerRef.current = null;
+  }, []);
+
   const attachNavControl = useCallback((map: mapboxgl.Map) => {
     if (navControlRef.current) return;
-    const canvasContainer = map.getCanvasContainer?.();
-    if (!canvasContainer) return;
     const nav = new mapboxgl.NavigationControl({ visualizePitch: true });
     map.addControl(nav, "top-right");
     navControlRef.current = nav;
   }, []);
 
+  const syncMarker = useCallback(
+    (map: mapboxgl.Map) => {
+      if (!markerRef.current) {
+        markerRef.current = new mapboxgl.Marker({ color: "#1d4ed8" })
+          .setLngLat([longitude, latitude])
+          .addTo(map);
+      } else {
+        markerRef.current.setLngLat([longitude, latitude]);
+      }
+    },
+    [longitude, latitude],
+  );
+
   const onMapLoad = useCallback(
     (evt: { target: mapboxgl.Map }) => {
-      attachNavControl(evt.target);
-      setMapReady(true);
+      const map = evt.target;
+      styleReadyCleanupRef.current?.();
+      styleReadyCleanupRef.current = whenMapStyleReady(map, () => {
+        attachNavControl(map);
+        syncMarker(map);
+        setMapReady(true);
+      });
     },
-    [attachNavControl],
+    [attachNavControl, syncMarker],
   );
 
   const onMapRemove = useCallback(() => {
+    styleReadyCleanupRef.current?.();
+    styleReadyCleanupRef.current = null;
     const map = mapRef.current?.getMap();
     if (map) detachNavControl(map);
+    removeMarker();
     setMapReady(false);
-  }, [detachNavControl]);
+  }, [detachNavControl, removeMarker]);
 
   useEffect(() => {
     if (!mapReady) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
     map.jumpTo({ center: [longitude, latitude], zoom: map.getZoom() });
+    if (markerRef.current) {
+      markerRef.current.setLngLat([longitude, latitude]);
+    }
   }, [mapReady, latitude, longitude]);
 
   return (
@@ -127,7 +174,6 @@ export function UrbanMap({
               />
             </Source>
           ) : null}
-          <Marker longitude={longitude} latitude={latitude} anchor="center" color="#1d4ed8" />
         </>
       ) : null}
     </Map>

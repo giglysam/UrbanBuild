@@ -4,9 +4,13 @@ import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
 
-import { ASSISTANT_RESPONSE_STYLE } from "@/lib/planning/assistant-response-style";
+import {
+  ASSISTANT_RESPONSE_STYLE,
+  SITE_ANALYSIS_RESPONSE_FORMAT,
+} from "@/lib/planning/assistant-response-style";
 import { getServerEnv } from "@/env/server";
-import type { PlanningContext, SiteAnalysis, SiteIndicators } from "@/lib/types/planning";
+import type { PlanningContext, PlanningNarrative, SiteIndicators } from "@/lib/types/planning";
+import type { StructuredSiteAnalysis } from "@/lib/types/site-feasibility";
 
 const briefDocSchema = z.object({
   title: z.string(),
@@ -29,7 +33,8 @@ function getOpenAI() {
 
 export async function generatePlanningBriefDocument(input: {
   indicators: SiteIndicators;
-  priorAnalysis?: SiteAnalysis | null;
+  siteAnalysis?: StructuredSiteAnalysis | null;
+  priorAnalysis?: PlanningNarrative | null;
   planningContext?: PlanningContext | null;
   editorNotes?: string;
 }): Promise<PlanningBriefDocument> {
@@ -39,14 +44,17 @@ export async function generatePlanningBriefDocument(input: {
   const response = await client.responses.parse({
     model,
     instructions: `You produce a formal planning brief for practitioners. Do not invent official zoning. Tag uncertainty where needed.
+Section bodies: short paragraphs and bullets only—never dense blocks. Align core diagnosis sections with:
+${SITE_ANALYSIS_RESPONSE_FORMAT}
 
 ${ASSISTANT_RESPONSE_STYLE}`,
     input: [
       {
         role: "user",
         content: JSON.stringify({
-          task: "Create a structured planning brief document with titled sections.",
+          task: "Create a structured planning brief document with titled sections grounded in the pinned site.",
           indicators: input.indicators,
+          structured_site_analysis: input.siteAnalysis ?? null,
           planner_context: input.planningContext ?? null,
           prior_analysis_excerpt: input.priorAnalysis
             ? {

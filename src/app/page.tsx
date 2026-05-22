@@ -11,21 +11,21 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 const features = [
   {
     icon: Box,
-    title: "3D visualization",
+    title: "Pinned site context",
     description:
-      "Spatial context for corridors, districts, and parcels — rotate and explore study geometry before you commit to a scenario.",
+      "Map a study pin and radius, then read built form, access, and receptors in the buffer—grounded to coordinates, not city-wide generalities.",
   },
   {
     icon: BarChart3,
-    title: "Data-driven insights",
+    title: "Readiness scoring",
     description:
-      "OSM-backed metrics with explicit confidence, so planners and architects see the signal behind every indicator.",
+      "Rule-based feasibility scores (0–100) per project type, with clear missing-data warnings and required studies before design commitment.",
   },
   {
     icon: Compass,
-    title: "Custom planning",
+    title: "Professional AI assistant",
     description:
-      "Briefs, comparisons, and exports tuned to your project — saved workspaces, versions, and chat threads in one flow.",
+      "Chat follows a seven-section readiness brief—site conditions, zoning gaps, utilities, risks, and a proceed / caution / redesign recommendation.",
   },
 ] as const;
 
@@ -41,13 +41,16 @@ export default function LandingPage() {
 
           <div className="relative mx-auto grid max-w-6xl gap-12 px-4 pb-16 pt-12 sm:px-6 md:grid-cols-2 md:items-center md:gap-14 md:pb-24 md:pt-16">
             <ScrollReveal>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c4b8c8]">Urban intelligence</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c4b8c8]">
+                Pre-feasibility · site intelligence
+              </p>
               <h1 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-tight text-balance text-foreground md:text-5xl lg:text-[3.35rem]">
-                Plan cities with clarity, depth, and control
+                Know if a site is worth pursuing—before you design
               </h1>
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground">
-                UrbanBuild fuses maps, structured analysis, and AI assistance into one premium workspace — built for
-                teams who need defensible narratives, not generic blurbs.
+                UrbanBuild helps engineers, architects, planners, and developers gather the site, regulatory, and
+                infrastructure facts normally required before a project starts—then scores readiness and lists what
+                still needs official study.
               </p>
               <div className="mt-10 flex flex-wrap gap-3">
                 <Button asChild size="lg" variant="glossy" className="gap-2 px-7">
@@ -77,11 +80,11 @@ export default function LandingPage() {
             <ScrollReveal>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#9a8fa0]">Capabilities</p>
               <h2 className="mt-3 text-3xl font-semibold tracking-tight text-balance md:text-4xl">
-                Built for serious urban work
+                Built for pre-project decisions
               </h2>
               <p className="mt-4 max-w-2xl text-muted-foreground">
-                From first sketch to council-ready outputs — every surface is tuned for focus, contrast, and calm
-                motion.
+                From first site pin to a defensible go / no-go narrative—without pretending OSM data is official zoning
+                or permit approval.
               </p>
             </ScrollReveal>
 
@@ -156,7 +159,7 @@ export default function LandingPage() {
       </main>
 
       <footer className="border-t border-white/[0.06] bg-[#0a0a0a] py-10 text-center text-xs leading-relaxed text-muted-foreground">
-        UrbanBuild — structured analysis; no fabricated official zoning without verified sources.
+        UrbanBuild — AI pre-feasibility; OSM and open data only unless you add verified sources.
       </footer>
     </div>
   );

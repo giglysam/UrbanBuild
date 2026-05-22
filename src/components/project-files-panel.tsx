@@ -3,10 +3,11 @@
 import { Trash2, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { getClientEnv } from "@/env/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { createClient } from "@/lib/supabase/client";
+import { SupabaseFeatureFallback } from "@/components/supabase-setup-notice";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { SUPABASE_FEATURE_FALLBACK } from "@/lib/supabase/config";
 
 type FileRow = {
   id: string;
@@ -49,9 +50,8 @@ export function ProjectFilesPanel({ projectId }: { projectId: string }) {
     setUploading(true);
     setError(null);
     try {
-      const env = getClientEnv();
-      if (!env.NEXT_PUBLIC_SUPABASE_URL) {
-        throw new Error("Supabase not configured");
+      if (!isSupabaseConfigured()) {
+        throw new Error(SUPABASE_FEATURE_FALLBACK);
       }
       const supabase = createClient();
       const {
@@ -99,6 +99,20 @@ export function ProjectFilesPanel({ projectId }: { projectId: string }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed");
     }
+  }
+
+  if (!isSupabaseConfigured()) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Project files</CardTitle>
+          <CardDescription>Requires Supabase Storage.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SupabaseFeatureFallback compact />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (

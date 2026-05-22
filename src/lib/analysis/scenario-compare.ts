@@ -35,7 +35,7 @@ export async function compareScenariosWithLLM(a: Scenario, b: Scenario): Promise
 
   const response = await client.responses.parse({
     model,
-    instructions: `You compare two urban planning scenarios. Be concise and professional. Do not invent zoning law.
+    instructions: `You compare two urban planning scenarios. Use headings and bullet lists; no dense paragraphs. Do not invent zoning law.
 
 ${ASSISTANT_RESPONSE_STYLE}`,
     input: [

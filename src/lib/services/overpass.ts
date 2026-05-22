@@ -1,6 +1,6 @@
 import { OVERPASS_FETCH_MS } from "@/lib/api/http";
 import { getServerEnv } from "@/env/server";
-import type { OverpassElement, OverpassResponse } from "@/lib/geo/indicators";
+import type { OverpassElement, OverpassResponse } from "@/lib/geo/overpass-types";
 
 const DEFAULT_ENDPOINT = "https://overpass-api.de/api/interpreter";
 
@@ -24,45 +24,75 @@ function uniqueEndpointChain(primary: string): string[] {
   return out;
 }
 
-const Q_TIMEOUT = 20;
+const Q_TIMEOUT = 25;
 
-/** Two lighter queries reduce per-request load on public Overpass instances (fewer 504s than one large union). */
-function buildAroundQueryParts(lat: number, lng: number, radiusM: number): [string, string] {
+/**
+ * Batched Overpass queries for the 10 site-feasibility OSM layers.
+ * Split to reduce 504 timeouts on public instances while staying within one study radius.
+ */
+export function buildAroundQueryParts(lat: number, lng: number, radiusM: number): string[] {
   const r = Math.round(radiusM);
   const head = `[out:json][timeout:${Q_TIMEOUT}];`;
-  const q1 = `${head}
+  const around = `around:${r},${lat},${lng}`;
+
+  return [
+    `${head}
 (
-  nwr(around:${r},${lat},${lng})["building"];
-  nwr(around:${r},${lat},${lng})["highway"];
+  nwr(${around})["building"];
+  nwr(${around})["highway"];
+  nwr(${around})["public_transport"];
+  nwr(${around})["railway"~"^(station|halt|tram_stop|subway_entrance|stop)$"];
 );
-out center;`;
-  const q2 = `${head}
+out center;`,
+    `${head}
 (
-  nwr(around:${r},${lat},${lng})["leisure"];
-  nwr(around:${r},${lat},${lng})["landuse"];
-  nwr(around:${r},${lat},${lng})["natural"];
-  nwr(around:${r},${lat},${lng})["amenity"];
+  nwr(${around})["leisure"];
+  nwr(${around})["landuse"];
+  nwr(${around})["natural"];
 );
-out center;`;
-  return [q1.trim(), q2.trim()];
+out center;`,
+    `${head}
+(
+  nwr(${around})["amenity"];
+  nwr(${around})["shop"];
+  nwr(${around})["office"];
+);
+out center;`,
+  ].map((q) => q.trim());
 }
 
-function mergeOverpassResponses(a: OverpassResponse, b: OverpassResponse): OverpassResponse {
+function mergeOverpassResponses(responses: OverpassResponse[]): OverpassResponse {
   const seen = new Set<string>();
   const elements: OverpassElement[] = [];
-  for (const el of a.elements) {
-    const k = `${el.type}/${el.id}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    elements.push(el);
+  let remark: string | undefined;
+
+  for (const res of responses) {
+    if (res.remark) remark = res.remark;
+    for (const el of res.elements) {
+      const k = `${el.type}/${el.id}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      elements.push(el);
+    }
   }
-  for (const el of b.elements) {
-    const k = `${el.type}/${el.id}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    elements.push(el);
+
+  return { elements, remark };
+}
+
+async function postOverpassQuery(ep: string, query: string): Promise<OverpassResponse> {
+  const body = new URLSearchParams({ data: query }).toString();
+  const res = await fetch(ep, {
+    method: "POST",
+    body,
+    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    next: { revalidate: 0 },
+    signal: AbortSignal.timeout(OVERPASS_FETCH_MS),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    return Promise.reject({ status: res.status, text });
   }
-  return { elements, remark: a.remark ?? b.remark };
+  return JSON.parse(text) as OverpassResponse;
 }
 
 export async function fetchOverpassContext(
@@ -71,7 +101,7 @@ export async function fetchOverpassContext(
   radiusM: number,
   endpoint = getServerEnv().OVERPASS_API_URL ?? DEFAULT_ENDPOINT,
 ): Promise<OverpassResponse> {
-  const [query1, query2] = buildAroundQueryParts(lat, lng, radiusM);
+  const queries = buildAroundQueryParts(lat, lng, radiusM);
   const chain = uniqueEndpointChain(endpoint);
 
   let lastText = "";
@@ -81,53 +111,40 @@ export async function fetchOverpassContext(
     const moreMirrors = epIdx < chain.length - 1;
 
     for (let attempt = 0; attempt < MAX_OVERPASS_ATTEMPTS; attempt++) {
-      const postQuery = async (q: string) => {
-        const body = new URLSearchParams({ data: q }).toString();
-        return fetch(ep, {
-          method: "POST",
-          body,
-          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-          next: { revalidate: 0 },
-          signal: AbortSignal.timeout(OVERPASS_FETCH_MS),
-        });
-      };
-
-      const res1 = await postQuery(query1);
-      let res: Response;
-
-      if (!res1.ok) {
-        res = res1;
-        lastText = await res1.text();
-      } else {
-        const res2 = await postQuery(query2);
-        if (!res2.ok) {
-          res = res2;
-          lastText = await res2.text();
-          void res1.body?.cancel?.();
-        } else {
-          const j1 = (await res1.json()) as OverpassResponse;
-          const j2 = (await res2.json()) as OverpassResponse;
-          return mergeOverpassResponses(j1, j2);
+      try {
+        const parts: OverpassResponse[] = [];
+        for (const q of queries) {
+          parts.push(await postOverpassQuery(ep, q));
         }
-      }
+        return mergeOverpassResponses(parts);
+      } catch (err: unknown) {
+        const status =
+          err && typeof err === "object" && "status" in err && typeof err.status === "number"
+            ? err.status
+            : 0;
+        lastText =
+          err && typeof err === "object" && "text" in err && typeof err.text === "string"
+            ? err.text
+            : err instanceof Error
+              ? err.message
+              : "";
 
-      const willRetry =
-        RETRYABLE_STATUS.has(res.status) && attempt < MAX_OVERPASS_ATTEMPTS - 1;
-      if (willRetry) {
-        continue;
-      }
+        const willRetry = RETRYABLE_STATUS.has(status) && attempt < MAX_OVERPASS_ATTEMPTS - 1;
+        if (willRetry) continue;
 
-      const canFailover = RETRYABLE_STATUS.has(res.status) && moreMirrors;
-      if (canFailover) {
-        continue endpointLoop;
-      }
+        const canFailover = RETRYABLE_STATUS.has(status) && moreMirrors;
+        if (canFailover) continue endpointLoop;
 
-      if (res.status === 504) {
-        throw new Error(
-          "Overpass timed out on all tried mirrors (public servers busy or area too large). Try a smaller study radius or retry later.",
-        );
+        if (status === 504) {
+          throw new Error(
+            "Overpass timed out on all tried mirrors (public servers busy or area too large). Try a smaller study radius or retry later.",
+          );
+        }
+        if (status > 0) {
+          throw new Error(`Overpass error ${status}: ${lastText.slice(0, 400)}`);
+        }
+        throw err instanceof Error ? err : new Error("Overpass request failed");
       }
-      throw new Error(`Overpass error ${res.status}: ${lastText.slice(0, 400)}`);
     }
   }
 

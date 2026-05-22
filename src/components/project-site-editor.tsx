@@ -3,8 +3,10 @@
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 import { Loader2, Save } from "lucide-react";
+import mapboxgl from "mapbox-gl";
 import { useCallback, useRef, useState } from "react";
-import Map, { Marker, NavigationControl, type MapRef } from "react-map-gl/mapbox";
+import Map, { Marker, type MapRef } from "react-map-gl/mapbox";
+import "mapbox-gl/dist/mapbox-gl.css";
 import type { FeatureCollection, Polygon } from "geojson";
 
 import { getClientEnv } from "@/env/client";
@@ -29,6 +31,7 @@ export function ProjectSiteEditor({ projectId, initial }: Props) {
   const token = getClientEnv().NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
   const mapRef = useRef<MapRef>(null);
   const drawRef = useRef<MapboxDraw | null>(null);
+  const navControlRef = useRef<mapboxgl.NavigationControl | null>(null);
 
   const [lat, setLat] = useState(initial.center_lat ?? 33.8938);
   const [lng, setLng] = useState(initial.center_lng ?? 35.5018);
@@ -37,25 +40,62 @@ export function ProjectSiteEditor({ projectId, initial }: Props) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
-  const onMapLoad = useCallback(() => {
-    const map = mapRef.current?.getMap();
-    if (!map || drawRef.current) return;
-    const draw = new MapboxDraw({
-      displayControlsDefault: false,
-      controls: { polygon: true, trash: true },
-    });
-    map.addControl(draw, "top-left");
-    drawRef.current = draw;
-
-    if (initial.boundary_geojson && typeof initial.boundary_geojson === "object") {
+  const detachMapControls = useCallback((map: mapboxgl.Map) => {
+    if (drawRef.current) {
       try {
-        draw.add(initial.boundary_geojson as GeoJSON.Feature | GeoJSON.FeatureCollection);
+        map.removeControl(drawRef.current);
       } catch {
         /* ignore */
       }
+      drawRef.current = null;
     }
+    if (navControlRef.current) {
+      try {
+        map.removeControl(navControlRef.current);
+      } catch {
+        /* ignore */
+      }
+      navControlRef.current = null;
+    }
+  }, []);
+
+  const onMapLoad = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (!map?.getCanvasContainer?.()) return;
+
+    if (!drawRef.current) {
+      const draw = new MapboxDraw({
+        displayControlsDefault: false,
+        controls: { polygon: true, trash: true },
+      });
+      map.addControl(draw, "top-left");
+      drawRef.current = draw;
+
+      if (initial.boundary_geojson && typeof initial.boundary_geojson === "object") {
+        try {
+          draw.add(initial.boundary_geojson as GeoJSON.Feature | GeoJSON.FeatureCollection);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    if (!navControlRef.current) {
+      const nav = new mapboxgl.NavigationControl();
+      map.addControl(nav, "top-right");
+      navControlRef.current = nav;
+    }
+
+    setMapReady(true);
   }, [initial.boundary_geojson]);
+
+  const onMapRemove = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (map) detachMapControls(map);
+    setMapReady(false);
+  }, [detachMapControls]);
 
   async function save() {
     setSaving(true);
@@ -117,14 +157,16 @@ export function ProjectSiteEditor({ projectId, initial }: Props) {
           initialViewState={{ longitude: lng, latitude: lat, zoom: 13 }}
           style={{ width: "100%", height: "100%" }}
           onLoad={onMapLoad}
+          onRemove={onMapRemove}
           onClick={(e) => {
             const { lat: la, lng: ln } = e.lngLat;
             setLat(la);
             setLng(ln);
           }}
         >
-          <NavigationControl position="top-right" />
-          <Marker longitude={lng} latitude={lat} anchor="center" color="#1d4ed8" />
+          {mapReady ? (
+            <Marker longitude={lng} latitude={lat} anchor="center" color="#1d4ed8" />
+          ) : null}
         </Map>
       </div>
       <Card>

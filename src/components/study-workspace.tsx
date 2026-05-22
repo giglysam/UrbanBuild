@@ -1,13 +1,36 @@
 "use client";
 
 import { getClientEnv } from "@/env/client";
-import { Loader2, MapPin, Search, Sparkles } from "lucide-react";
+import { ImageIcon, Loader2, MapPin, Search, Sparkles } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { FeatureCollection, Point } from "geojson";
-import type { MapboxCommandPlan, MapboxContextBundle, SiteAnalysis } from "@/lib/types/planning";
+import type {
+  DesignConcept,
+  DesignConceptsBundle,
+  GeneratedConceptImage,
+  MapboxCommandPlan,
+  MapboxContextBundle,
+  PlanningNarrative,
+} from "@/lib/types/planning";
+import type { SiteBufferMetrics } from "@/lib/geo/site-buffer-metrics";
+import type { BeirutUrbanLabContext } from "@/lib/types/beirut-urban-lab";
+import type { ProjectTypeId, StructuredSiteAnalysis } from "@/lib/types/site-feasibility";
+import { FeasibilitySummaryPanel } from "@/components/feasibility-summary-panel";
+import { ProjectTypeSelector } from "@/components/project-type-selector";
+import { SiteBufferMetricsPanel } from "@/components/site-buffer-metrics-panel";
+import { BeirutUrbanLabPanel } from "@/components/beirut-urban-lab-panel";
+import { logSiteDataDebug } from "@/lib/planning/format-site-data-used";
+import { SiteQualitativeRatingsPanel } from "@/components/site-qualitative-ratings-panel";
+import { ChatMessageContent } from "@/components/chat-message-content";
+import { ConceptVisualPanel } from "@/components/concept-visual-panel";
+import { DesignConceptSummary } from "@/components/design-concept-summary";
+import { SaveWorkspaceButton } from "@/components/save-workspace-button";
 import { GoogleMapsEmbed } from "@/components/google-maps-embed";
+import { useChatAutoScroll } from "@/hooks/use-chat-auto-scroll";
+import { loadDemoChat, saveDemoChat, type DemoChatMessage } from "@/lib/demo/demo-chat-storage";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,23 +103,35 @@ export function StudyWorkspace() {
   const [geocodeLoading, setGeocodeLoading] = useState(false);
 
   const [metrics, setMetrics] = useState<Record<string, number | string> | null>(null);
-  const [analysis, setAnalysis] = useState<SiteAnalysis | null>(null);
+  const [bufferMetrics, setBufferMetrics] = useState<SiteBufferMetrics | null>(null);
+  const [beirutUrbanLab, setBeirutUrbanLab] = useState<BeirutUrbanLabContext | null>(null);
+  const [siteAnalysis, setSiteAnalysis] = useState<StructuredSiteAnalysis | null>(null);
+  const [planningNarrative, setPlanningNarrative] = useState<PlanningNarrative | null>(null);
+  const [projectType, setProjectType] = useState<ProjectTypeId>("mixed_use_development");
+  const [customProjectDescription, setCustomProjectDescription] = useState("");
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
 
   const [chatInput, setChatInput] = useState("");
-  const [chatMessages, setChatMessages] = useState<{ role: "user" | "assistant"; content: string }[]>(
-    [
-      {
-        role: "assistant",
-        content:
-          "Ask about walkability, public space, mobility, or coastal risks for your study pin. I will not invent official zoning — cite local authorities for binding rules.",
-      },
-    ],
-  );
+  const [chatMessages, setChatMessages] = useState<DemoChatMessage[]>([
+    {
+      role: "assistant",
+      content:
+        "Pin a site, choose a project type, run site analysis, then ask feasibility questions grounded in your study—not generic city advice.",
+    },
+  ]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  const [mapView, setMapView] = useState<"mapbox" | "google">("mapbox");
+  const [mainDisplay, setMainDisplay] = useState<"map" | "image">("map");
+  const [mapProvider, setMapProvider] = useState<"mapbox" | "google">("mapbox");
+  const [designBundle, setDesignBundle] = useState<DesignConceptsBundle | null>(null);
+  const [conceptsLoading, setConceptsLoading] = useState(false);
+  const [conceptsError, setConceptsError] = useState<string | null>(null);
+  const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
+  const [conceptImages, setConceptImages] = useState<Record<string, GeneratedConceptImage>>({});
+  const [imageLoadingId, setImageLoadingId] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [googleSatellite, setGoogleSatellite] = useState(true);
   const [mapboxStyleId, setMapboxStyleId] = useState<"streets-v12" | "light-v11" | "dark-v11" | "satellite-streets-v12">("light-v11");
   const [mapboxContext, setMapboxContext] = useState<MapboxContextBundle | null>(null);
@@ -116,8 +151,53 @@ export function StudyWorkspace() {
   );
 
   useEffect(() => {
-    setMapView(token ? "mapbox" : "google");
-  }, [token]);
+    if (!token && mapProvider === "mapbox") setMapProvider("google");
+  }, [token, mapProvider]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      setIsLoggedIn(false);
+      return;
+    }
+    const supabase = createClient();
+    void supabase.auth.getSession().then(({ data }) => {
+      setIsLoggedIn(Boolean(data.session?.user));
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setIsLoggedIn(Boolean(session?.user));
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const stored = loadDemoChat();
+    if (stored?.length) setChatMessages(stored);
+  }, []);
+
+  useEffect(() => {
+    saveDemoChat(chatMessages);
+  }, [chatMessages]);
+
+  const { scrollRootRef, messagesEndRef, scrollOnSend } = useChatAutoScroll([chatMessages, chatLoading], {
+    isLoading: chatLoading,
+  });
+
+  const selectedConcept = useMemo((): DesignConcept | null => {
+    if (!designBundle || !selectedConceptId) return null;
+    return designBundle.concepts.find((c) => c.id === selectedConceptId) ?? null;
+  }, [designBundle, selectedConceptId]);
+
+  const selectedConceptImage = selectedConceptId ? (conceptImages[selectedConceptId]?.imageDataUrl ?? null) : null;
+
+  const conceptOptions = useMemo(
+    () =>
+      (designBundle?.concepts ?? []).map((c) => ({
+        id: c.id,
+        title: c.title,
+        hasImage: Boolean(conceptImages[c.id]?.imageDataUrl),
+      })),
+    [designBundle, conceptImages],
+  );
 
   const setLocation = useCallback((nextLat: number, nextLng: number) => {
     setLat(nextLat);
@@ -196,17 +276,39 @@ export function StudyWorkspace() {
     setAnalyzeLoading(true);
     setAnalyzeError(null);
     setMetrics(null);
-    setAnalysis(null);
+    setBufferMetrics(null);
+    setBeirutUrbanLab(null);
+    setSiteAnalysis(null);
+    setPlanningNarrative(null);
+    setDesignBundle(null);
+    setSelectedConceptId(null);
+    setConceptImages({});
+    setConceptsError(null);
+    setImageError(null);
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lat, lng, radiusM }),
+        body: JSON.stringify({
+          lat,
+          lng,
+          radiusM,
+          projectType,
+          customProjectDescription: projectType === "custom" ? customProjectDescription : undefined,
+          placeLabel: query.trim() || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Analysis failed");
       setMetrics(data.indicators);
-      setAnalysis(data.analysis);
+      setBufferMetrics(
+        data.bufferMetrics ?? data.siteAnalysis?.bufferMetrics ?? null,
+      );
+      const analysis = data.siteAnalysis ?? null;
+      setSiteAnalysis(analysis);
+      setBeirutUrbanLab(data.beirutUrbanLab ?? analysis?.beirutUrbanLab ?? null);
+      setPlanningNarrative(data.planningNarrative ?? data.analysis ?? null);
+      if (analysis) logSiteDataDebug(analysis, "UrbanBuild demo analyze");
     } catch (e) {
       setAnalyzeError(e instanceof Error ? e.message : "Analysis failed");
     } finally {
@@ -214,10 +316,92 @@ export function StudyWorkspace() {
     }
   };
 
+  const onGenerateConcepts = async () => {
+    if ((!siteAnalysis && !planningNarrative) || !metrics) {
+      setConceptsError("Run site analysis before generating design concepts.");
+      return;
+    }
+    setConceptsLoading(true);
+    setConceptsError(null);
+    try {
+      const res = await fetch("/api/design/concepts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lat,
+          lng,
+          radiusM,
+          placeLabel: query,
+          indicators: metrics,
+          siteAnalysis: siteAnalysis ?? undefined,
+          analysis: planningNarrative ?? undefined,
+          mapboxContextText: mapboxContext?.textualContext,
+        }),
+      });
+      const data = (await res.json()) as { bundle?: DesignConceptsBundle; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Concept generation failed");
+      if (!data.bundle) throw new Error("Missing design concepts in response");
+      setDesignBundle(data.bundle);
+      setSelectedConceptId(data.bundle.concepts[0]?.id ?? null);
+      setConceptImages({});
+    } catch (e) {
+      setConceptsError(e instanceof Error ? e.message : "Concept generation failed");
+    } finally {
+      setConceptsLoading(false);
+    }
+  };
+
+  const onGenerateConceptImage = async (conceptId: string) => {
+    const concept = designBundle?.concepts.find((c) => c.id === conceptId);
+    if (!concept) return;
+    setImageLoadingId(conceptId);
+    setImageError(null);
+    setSelectedConceptId(conceptId);
+    setMainDisplay("image");
+    try {
+      const res = await fetch("/api/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lat,
+          lng,
+          radiusM,
+          placeLabel: query,
+          concept,
+          siteDiagnosis: designBundle?.siteDiagnosis,
+          siteAnalysisSummary:
+            siteAnalysis?.projectFeasibility?.planningBrief ?? planningNarrative?.planningBrief ?? undefined,
+          mapboxContextText: mapboxContext?.textualContext,
+          indicators: metrics ?? undefined,
+        }),
+      });
+      const data = (await res.json()) as {
+        imageDataUrl?: string;
+        promptUsed?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Image generation failed");
+      if (!data.imageDataUrl) throw new Error("Missing image in response");
+      const record: GeneratedConceptImage = {
+        conceptId,
+        imageDataUrl: data.imageDataUrl,
+        generatedAt: new Date().toISOString(),
+        promptPreview: data.promptUsed?.slice(0, 500),
+        storagePath: null,
+      };
+      setConceptImages((prev) => ({ ...prev, [conceptId]: record }));
+    } catch (e) {
+      setImageError(e instanceof Error ? e.message : "Image generation failed");
+    } finally {
+      setImageLoadingId(null);
+    }
+  };
+
   const onSendChat = async () => {
     const trimmed = chatInput.trim();
     if (!trimmed) return;
     applyCapabilityControlsFromChat(trimmed);
+    scrollOnSend();
     const next = [...chatMessages, { role: "user" as const, content: trimmed }];
     setChatMessages(next);
     setChatInput("");
@@ -226,11 +410,43 @@ export function StudyWorkspace() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next }),
+        body: JSON.stringify({
+          messages: next,
+          placeLabel: query.trim() || undefined,
+          siteContext: {
+            lat,
+            lng,
+            radiusM,
+            placeLabel: query.trim() || undefined,
+            projectType,
+            customProjectDescription:
+              projectType === "custom" ? customProjectDescription : undefined,
+            indicators: metrics ?? undefined,
+            bufferMetrics: bufferMetrics ?? siteAnalysis?.bufferMetrics ?? undefined,
+            beirutUrbanLab: beirutUrbanLab ?? siteAnalysis?.beirutUrbanLab ?? undefined,
+            siteAnalysis: siteAnalysis ?? undefined,
+            analysis: siteAnalysis ? undefined : (planningNarrative ?? undefined),
+            mapboxContextText: mapboxContext?.textualContext,
+          },
+        }),
       });
-      let data: { reply?: string; error?: string };
+      let data: {
+        reply?: string;
+        error?: string;
+        siteContext?: {
+          lat: number;
+          lng: number;
+          radiusM?: number;
+          projectType?: typeof projectType;
+          siteAnalysis?: typeof siteAnalysis;
+          bufferMetrics?: typeof bufferMetrics;
+          beirutUrbanLab?: typeof beirutUrbanLab;
+          indicators?: typeof metrics;
+        };
+        analysisRan?: boolean;
+      };
       try {
-        data = (await res.json()) as { reply?: string; error?: string };
+        data = (await res.json()) as typeof data;
       } catch {
         throw new Error("Invalid response from server");
       }
@@ -239,6 +455,22 @@ export function StudyWorkspace() {
       }
       if (typeof data.reply !== "string") {
         throw new Error("Chat response missing reply");
+      }
+      if (data.siteContext) {
+        const sc = data.siteContext;
+        if (sc.siteAnalysis) setSiteAnalysis(sc.siteAnalysis);
+        if (sc.bufferMetrics) setBufferMetrics(sc.bufferMetrics);
+        if (sc.beirutUrbanLab) setBeirutUrbanLab(sc.beirutUrbanLab);
+        if (sc.indicators) setMetrics(sc.indicators);
+        if (sc.projectType) setProjectType(sc.projectType);
+        if (sc.lat != null && sc.lng != null) {
+          setLat(sc.lat);
+          setLng(sc.lng);
+        }
+        if (sc.radiusM != null) setRadiusM(sc.radiusM);
+        if (data.analysisRan && sc.siteAnalysis) {
+          logSiteDataDebug(sc.siteAnalysis, "UrbanBuild chat analyze");
+        }
       }
       setChatMessages([...next, { role: "assistant", content: data.reply }]);
     } catch (e) {
@@ -431,86 +663,153 @@ export function StudyWorkspace() {
   return (
     <div className="flex min-h-dvh flex-col bg-background md:flex-row">
       <div className="flex min-h-[42vh] w-full flex-col md:min-h-dvh md:flex-1">
-        <Tabs value={mapView} onValueChange={(v) => setMapView(v as "mapbox" | "google")} className="flex flex-1 flex-col">
+        <Tabs
+          value={mainDisplay}
+          onValueChange={(v) => setMainDisplay(v as "map" | "image")}
+          className="flex flex-1 flex-col"
+        >
           <TabsList className="mx-3 mt-2 grid w-auto max-w-md shrink-0 grid-cols-2 self-center">
-            <TabsTrigger value="mapbox" className="text-xs sm:text-sm">
-              Mapbox
+            <TabsTrigger value="map" className="gap-1 text-xs sm:text-sm">
+              <MapPin className="size-3.5" aria-hidden />
+              Map view
             </TabsTrigger>
-            <TabsTrigger value="google" className="text-xs sm:text-sm">
-              Google Maps
+            <TabsTrigger value="image" className="gap-1 text-xs sm:text-sm">
+              <ImageIcon className="size-3.5" aria-hidden />
+              Generated image
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="mapbox" className="relative m-0 mt-0 flex min-h-[38vh] flex-1 flex-col data-[state=inactive]:hidden">
-            {!token ? (
-              <div className="flex min-h-[38vh] flex-1 items-center justify-center bg-muted p-6 text-center text-sm text-muted-foreground">
-                Set <code className="rounded bg-background px-1">NEXT_PUBLIC_MAPBOX_TOKEN</code> in{" "}
-                <code className="rounded bg-background px-1">.env.local</code> for the interactive Mapbox map, or use the
-                Google Maps tab.
-              </div>
-            ) : (
-              <UrbanMap
-                mapboxToken={token}
-                latitude={lat}
-                longitude={lng}
-                mapStyleId={mapboxStyleId}
-                routeGeojson={routeOverlay}
-                isochroneGeojson={isochroneOverlay}
-                poiGeojson={renderedPoiOverlay}
-                onLocationChange={setLocation}
-              />
-            )}
-            <div className="pointer-events-none absolute left-3 top-14 max-w-[min(100%-1.5rem,20rem)] rounded-lg border bg-card/95 p-3 text-xs shadow backdrop-blur pointer-events-auto md:top-3">
+          <TabsContent value="map" className="relative m-0 mt-0 flex min-h-[38vh] flex-1 flex-col data-[state=inactive]:hidden">
+            <div className="flex shrink-0 justify-center gap-1 border-b px-3 py-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant={mapProvider === "mapbox" ? "default" : "outline"}
+                className="text-xs"
+                disabled={!token}
+                onClick={() => setMapProvider("mapbox")}
+              >
+                Mapbox
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={mapProvider === "google" ? "default" : "outline"}
+                className="text-xs"
+                onClick={() => setMapProvider("google")}
+              >
+                Google Maps
+              </Button>
+            </div>
+            <div className="relative min-h-0 flex-1">
+              {mainDisplay === "map" && mapProvider === "mapbox" ? (
+                !token ? (
+                  <div className="flex h-full min-h-[38vh] flex-1 items-center justify-center bg-muted p-6 text-center text-sm text-muted-foreground">
+                    Set <code className="rounded bg-background px-1">NEXT_PUBLIC_MAPBOX_TOKEN</code> in{" "}
+                    <code className="rounded bg-background px-1">.env.local</code> for the interactive Mapbox map, or use
+                    the Google Maps tab.
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 min-h-[280px]">
+                    <UrbanMap
+                      key={`mapbox-${mapboxStyleId}`}
+                      mapboxToken={token}
+                      latitude={lat}
+                      longitude={lng}
+                      mapStyleId={mapboxStyleId}
+                      routeGeojson={routeOverlay}
+                      isochroneGeojson={isochroneOverlay}
+                      poiGeojson={renderedPoiOverlay}
+                      onLocationChange={setLocation}
+                    />
+                  </div>
+                )
+              ) : null}
+              {mainDisplay === "map" && mapProvider === "google" ? (
+                <div className="absolute inset-0 flex flex-col gap-2 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground">View</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={googleSatellite ? "default" : "outline"}
+                      onClick={() => setGoogleSatellite(true)}
+                    >
+                      Satellite
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={!googleSatellite ? "default" : "outline"}
+                      onClick={() => setGoogleSatellite(false)}
+                    >
+                      Map
+                    </Button>
+                  </div>
+                  <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-muted shadow-inner">
+                    <GoogleMapsEmbed
+                      key={`${lat.toFixed(5)}-${lng.toFixed(5)}-${googleSatellite}`}
+                      lat={lat}
+                      lng={lng}
+                      placeLabel={query}
+                      satellite={googleSatellite}
+                      className="absolute inset-0 h-full w-full min-h-[240px]"
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="pointer-events-none absolute left-3 top-20 z-10 max-w-[min(100%-1.5rem,20rem)] rounded-lg border bg-card/95 p-3 text-xs shadow backdrop-blur pointer-events-auto md:top-14">
               <div className="flex items-center gap-2 font-medium text-foreground">
                 <MapPin className="size-3.5 text-primary" aria-hidden />
-                UrbanBuild — Beirut pilot
+                Pre-feasibility · Beirut pilot
               </div>
               <p className="mt-1 text-muted-foreground">
-                Click the map to move the study pin. Radius uses OSM features inside the buffer (not legal zoning).
+                Pin a site and run analysis for readiness scoring. OSM/BBED in the buffer—not official zoning or utilities.
               </p>
             </div>
           </TabsContent>
 
-          <TabsContent value="google" className="m-0 mt-0 flex min-h-[38vh] flex-1 flex-col gap-2 p-3 pt-2 data-[state=inactive]:hidden">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">View</span>
-              <Button
-                type="button"
-                size="sm"
-                variant={googleSatellite ? "default" : "outline"}
-                onClick={() => setGoogleSatellite(true)}
-              >
-                Satellite
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={!googleSatellite ? "default" : "outline"}
-                onClick={() => setGoogleSatellite(false)}
-              >
-                Map
-              </Button>
-            </div>
-            <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-muted shadow-inner">
-              <GoogleMapsEmbed
-                key={`${lat.toFixed(5)}-${lng.toFixed(5)}-${googleSatellite}`}
-                lat={lat}
-                lng={lng}
-                placeLabel={query}
-                satellite={googleSatellite}
-                className="absolute inset-0 h-full w-full min-h-[280px]"
+          <TabsContent
+            value="image"
+            className="relative m-0 mt-0 flex min-h-[38vh] flex-1 flex-col data-[state=inactive]:hidden"
+          >
+            {mainDisplay === "image" ? (
+              <ConceptVisualPanel
+                concept={selectedConcept}
+                concepts={conceptOptions}
+                selectedConceptId={selectedConceptId}
+                onSelectConcept={(id) => {
+                  setSelectedConceptId(id);
+                  if (conceptImages[id]?.imageDataUrl) setMainDisplay("image");
+                }}
+                imageDataUrl={selectedConceptImage}
+                loading={imageLoadingId === selectedConceptId}
+                error={imageError}
+                onGenerateImage={() => selectedConceptId && void onGenerateConceptImage(selectedConceptId)}
+                onRegenerateImage={() => selectedConceptId && void onGenerateConceptImage(selectedConceptId)}
+                onBackToMap={() => setMainDisplay("map")}
+                canGenerate={Boolean(selectedConcept)}
               />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Embedded Google Maps preview (no API key). Center updates when you search or change coordinates in the
-              sidebar.
-            </p>
+            ) : null}
           </TabsContent>
         </Tabs>
       </div>
 
-      <aside className="flex w-full flex-col border-t bg-card md:h-dvh md:w-[min(100%,440px)] md:border-l md:border-t-0">
-        <div className="border-b p-4">
+      <aside className="flex min-h-0 w-full flex-col border-t bg-card md:h-dvh md:max-h-dvh md:w-[min(100%,440px)] md:overflow-hidden md:border-l md:border-t-0">
+        <div className="shrink-0 border-b p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">Demo workspace — chat is saved in this browser until you sign in.</p>
+            <SaveWorkspaceButton
+              isLoggedIn={isLoggedIn}
+              site={{ label: query, centerLat: lat, centerLng: lng, radiusM }}
+              indicators={metrics}
+              siteAnalysis={siteAnalysis}
+              planningNarrative={planningNarrative}
+              designBundle={designBundle}
+              chatMessages={chatMessages}
+            />
+          </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="flex-1 space-y-1">
               <Label htmlFor="search">Search place</Label>
@@ -586,83 +885,108 @@ export function StudyWorkspace() {
           <div className="mt-2 font-mono text-xs text-muted-foreground">
             {lat.toFixed(5)}, {lng.toFixed(5)}
           </div>
-          <Button className="mt-4 w-full" onClick={onAnalyze} disabled={analyzeLoading}>
-            {analyzeLoading ? (
-              <>
-                <Loader2 className="animate-spin" />
-                Running AI analysis…
-              </>
-            ) : (
-              <>
-                <Sparkles className="size-4" />
-                Run AI analysis
-              </>
-            )}
-          </Button>
-          {analyzeError ? <p className="mt-2 text-sm text-destructive">{analyzeError}</p> : null}
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2">
-          <div className="mb-2">
-            <div className="mb-2 flex gap-2">
-              <Button type="button" variant="outline" onClick={onLoadMapboxContext} disabled={mapboxContextLoading}>
-                {mapboxContextLoading ? <Loader2 className="size-4 animate-spin" /> : null}
-                Load Mapbox context
-              </Button>
-              <Button type="button" onClick={onRunMapboxCommand} disabled={mapboxCommandLoading} className="gap-2">
-                {mapboxCommandLoading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                Run command
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={onRunMatrix} disabled={matrixLoading}>
-                {matrixLoading ? <Loader2 className="size-3 animate-spin" /> : null}
-                Run matrix
+        <Tabs defaultValue="chat" className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+          <TabsList className="grid w-full shrink-0 grid-cols-3">
+            <TabsTrigger value="chat">Chat</TabsTrigger>
+            <TabsTrigger value="mapbox">Mapbox</TabsTrigger>
+            <TabsTrigger value="analysis">Analysis</TabsTrigger>
+          </TabsList>
+
+          <TabsContent
+            value="chat"
+            className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            <p className="mb-3 shrink-0 text-xs text-muted-foreground">
+              Ask planning questions about your study area. Map and data tools are in the other tabs.
+            </p>
+            <ScrollArea ref={scrollRootRef} className="mb-3 min-h-0 flex-1 rounded-lg border">
+              <div className="space-y-3 p-4">
+                {chatMessages.map((m, i) => (
+                  <div
+                    key={`${i}-${m.content.slice(0, 12)}`}
+                    className={
+                      m.role === "user"
+                        ? "ml-6 rounded-2xl rounded-br-md bg-primary px-3 py-2.5 text-sm text-primary-foreground"
+                        : "mr-6 rounded-2xl rounded-bl-md bg-muted px-3 py-2.5 text-sm leading-relaxed"
+                    }
+                  >
+                    {m.role === "assistant" ? (
+                      <ChatMessageContent content={m.content} />
+                    ) : (
+                      m.content
+                    )}
+                  </div>
+                ))}
+                {chatLoading ? (
+                  <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                    Thinking…
+                  </div>
+                ) : null}
+                <div ref={messagesEndRef} aria-hidden className="h-0 shrink-0" />
+              </div>
+            </ScrollArea>
+            <div className="relative z-10 flex shrink-0 gap-2 border-t bg-card pt-3">
+              <Input
+                id="demo-chat-input"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask a planning question…"
+                className="min-h-10"
+                disabled={chatLoading}
+                autoComplete="off"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void onSendChat();
+                  }
+                }}
+              />
+              <Button type="button" onClick={onSendChat} disabled={chatLoading} className="shrink-0 px-5">
+                Send
               </Button>
             </div>
-            <Input
-              value={mapboxCommand}
-              onChange={(e) => setMapboxCommand(e.target.value)}
-              placeholder="Tell AI what to show on the map (route, isochrone, POIs, style...)"
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), onRunMapboxCommand())}
-            />
-            {mapboxError ? <p className="mt-2 text-sm text-destructive">{mapboxError}</p> : null}
-          </div>
+          </TabsContent>
 
-          <ScrollArea className="mb-2 h-[min(28vh,240px)] rounded-md border md:h-[min(32vh,280px)]">
-            <div className="space-y-3 p-3">
-              {chatMessages.map((m, i) => (
-                <div
-                  key={`${i}-${m.content.slice(0, 12)}`}
-                  className={m.role === "user" ? "ml-4 rounded-lg bg-primary/10 p-2 text-sm" : "mr-4 rounded-lg bg-muted p-2 text-sm"}
-                >
-                  {m.content}
+          <TabsContent
+            value="mapbox"
+            className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            <ScrollArea className="min-h-0 flex-1 rounded-md border">
+              <div className="space-y-4 p-3">
+                <div className="space-y-2">
+                  <Label htmlFor="mapbox-command">Map command (AI-controlled)</Label>
+                  <Input
+                    id="mapbox-command"
+                    value={mapboxCommand}
+                    onChange={(e) => setMapboxCommand(e.target.value)}
+                    placeholder="e.g. Show walking isochrones and nearby parks"
+                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), onRunMapboxCommand())}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={onLoadMapboxContext} disabled={mapboxContextLoading}>
+                      {mapboxContextLoading ? <Loader2 className="size-4 animate-spin" /> : null}
+                      Load context
+                    </Button>
+                    <Button type="button" size="sm" onClick={onRunMapboxCommand} disabled={mapboxCommandLoading} className="gap-1.5">
+                      {mapboxCommandLoading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                      Run on map
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={onRunMatrix} disabled={matrixLoading}>
+                      {matrixLoading ? <Loader2 className="size-3 animate-spin" /> : null}
+                      Matrix
+                    </Button>
+                  </div>
+                  {mapboxError ? <p className="text-sm text-destructive">{mapboxError}</p> : null}
                 </div>
-              ))}
-              {chatLoading ? (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="size-3 animate-spin" /> Thinking…
-                </div>
-              ) : null}
-            </div>
-          </ScrollArea>
-          <div className="mb-2 flex gap-2">
-            <Input
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Ask planning + map questions in one chat…"
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), onSendChat())}
-            />
-            <Button type="button" onClick={onSendChat} disabled={chatLoading}>
-              Send
-            </Button>
-          </div>
 
-          <ScrollArea className="h-[min(50vh,420px)] rounded-md border md:h-[calc(100dvh-400px)]">
-            <div className="space-y-4 p-3">
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Capabilities & documentation buttons</CardTitle>
+                  <CardTitle className="text-sm">Mapbox capabilities</CardTitle>
                   <CardDescription>
-                    Toggle capabilities, open docs, and run AI templates. Chat can also enable/disable by name.
+                    Enable APIs, open docs, or run templates. In Chat you can also say &quot;enable matrix&quot; or &quot;disable tilequery&quot;.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -703,25 +1027,6 @@ export function StudyWorkspace() {
                       );
                     })}
                   </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Metrics</CardTitle>
-                  <CardDescription>Current OSM/map-derived indicators.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {metricEntries.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Run analysis to load OSM-derived indicators.</p>
-                  ) : (
-                    metricEntries.map(([k, v]) => (
-                      <div key={k} className="flex justify-between gap-4 text-sm">
-                        <span className="text-muted-foreground">{k.replace(/_/g, " ")}</span>
-                        <span className="font-mono text-right text-foreground">{String(v)}</span>
-                      </div>
-                    ))
-                  )}
                 </CardContent>
               </Card>
 
@@ -803,38 +1108,182 @@ export function StudyWorkspace() {
                   ) : null}
                 </CardContent>
               </Card>
+              </div>
+            </ScrollArea>
+          </TabsContent>
 
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Structured AI analysis</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {!analysis ? (
-                    <p className="text-sm text-muted-foreground">
-                      Structured insights use OpenAI with urban-planning instructions and confidence labels.
-                    </p>
-                  ) : (
-                    <>
-                      <div className="text-sm leading-relaxed">{analysis.planningBrief}</div>
-                      <Separator />
-                      <div className="space-y-2">
-                        {analysis.insights.map((ins, i) => (
-                          <div key={`${ins.title}-${i}`} className="rounded border p-2 text-sm">
-                            <div className="mb-1 flex items-center justify-between gap-2">
-                              <span className="font-medium">{ins.title}</span>
-                              <Badge variant={confidenceVariant(ins.confidence)}>{ins.confidence}</Badge>
-                            </div>
-                            <p className="text-muted-foreground">{ins.body}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
+          <TabsContent
+            value="analysis"
+            className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            <div className="mb-3 shrink-0 space-y-3">
+              <ProjectTypeSelector
+                value={projectType}
+                onChange={setProjectType}
+                customDescription={customProjectDescription}
+                onCustomDescriptionChange={setCustomProjectDescription}
+                disabled={analyzeLoading}
+              />
+              <Button className="w-full gap-2" onClick={onAnalyze} disabled={analyzeLoading}>
+                {analyzeLoading ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                    Running feasibility analysis…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="size-4" aria-hidden />
+                    Run site feasibility (GIS + score)
+                  </>
+                )}
+              </Button>
+              {analyzeError ? <p className="text-sm text-destructive">{analyzeError}</p> : null}
             </div>
-          </ScrollArea>
-        </div>
+            <ScrollArea className="min-h-0 flex-1 rounded-md border">
+              <div className="space-y-4 p-3">
+                <FeasibilitySummaryPanel siteAnalysis={siteAnalysis} />
+                <SiteBufferMetricsPanel
+                  metrics={bufferMetrics ?? siteAnalysis?.bufferMetrics ?? null}
+                />
+                <SiteQualitativeRatingsPanel ratings={siteAnalysis?.qualitativeRatings} />
+                <BeirutUrbanLabPanel context={beirutUrbanLab ?? siteAnalysis?.beirutUrbanLab} />
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Structured AI analysis</CardTitle>
+                    <CardDescription>Insights, scenarios, and planning brief from your site run.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {!planningNarrative ? (
+                      <p className="text-sm text-muted-foreground">
+                        Run site analysis to generate insights with confidence labels.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="text-sm leading-relaxed">{planningNarrative.planningBrief}</div>
+                        <Separator />
+                        <div className="space-y-2">
+                          {planningNarrative.insights.map((ins, i) => (
+                            <div key={`${ins.title}-${i}`} className="rounded border p-2 text-sm">
+                              <div className="mb-1 flex items-center justify-between gap-2">
+                                <span className="font-medium">{ins.title}</span>
+                                <Badge variant={confidenceVariant(ins.confidence)}>{ins.confidence}</Badge>
+                              </div>
+                              <p className="text-muted-foreground">{ins.body}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Design concepts</CardTitle>
+                    <CardDescription>
+                      2–4 proposals after site diagnosis. Generate a visual for any concept — it appears in the Concept
+                      tab.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full gap-2"
+                      disabled={(!siteAnalysis && !planningNarrative) || conceptsLoading}
+                      onClick={() => void onGenerateConcepts()}
+                    >
+                      {conceptsLoading ? (
+                        <Loader2 className="size-4 animate-spin" aria-hidden />
+                      ) : (
+                        <Sparkles className="size-4" aria-hidden />
+                      )}
+                      Generate design concepts
+                    </Button>
+                    {conceptsError ? <p className="text-sm text-destructive">{conceptsError}</p> : null}
+                    {!designBundle ? (
+                      <p className="text-sm text-muted-foreground">
+                        Requires completed site analysis. Concepts reflect context, materials, massing, and feasibility
+                        cautions.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="prose prose-sm max-w-none text-sm leading-relaxed dark:prose-invert">
+                          <div className="whitespace-pre-wrap">{designBundle.siteDiagnosis}</div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Underground / buildability: {designBundle.subsurfaceCautions}
+                        </p>
+                        <div className="space-y-2">
+                          {designBundle.concepts.map((c) => {
+                            const selected = selectedConceptId === c.id;
+                            const hasImage = Boolean(conceptImages[c.id]?.imageDataUrl);
+                            return (
+                              <div
+                                key={c.id}
+                                className={`rounded-lg border p-3 text-sm transition-colors ${selected ? "border-primary bg-primary/5" : ""}`}
+                              >
+                                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                                  <span className="font-medium">{c.title}</span>
+                                  <Badge variant="outline">{c.interventionType.replace(/_/g, " ")}</Badge>
+                                </div>
+                                <div className="mt-2 text-muted-foreground">
+                                  <DesignConceptSummary concept={c} compact />
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={selected ? "default" : "outline"}
+                                    onClick={() => {
+                                      setSelectedConceptId(c.id);
+                                      if (conceptImages[c.id]?.imageDataUrl) setMainDisplay("image");
+                                    }}
+                                  >
+                                    Select
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    className="gap-1"
+                                    disabled={imageLoadingId === c.id}
+                                    onClick={() => void onGenerateConceptImage(c.id)}
+                                  >
+                                    {imageLoadingId === c.id ? (
+                                      <Loader2 className="size-3 animate-spin" aria-hidden />
+                                    ) : (
+                                      <ImageIcon className="size-3" aria-hidden />
+                                    )}
+                                    {hasImage ? "Regenerate image" : "Visualize proposal"}
+                                  </Button>
+                                  {hasImage ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => {
+                                        setSelectedConceptId(c.id);
+                                        setMainDisplay("image");
+                                      }}
+                                    >
+                                      View image
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
       </aside>
     </div>
   );

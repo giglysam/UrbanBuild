@@ -1,11 +1,14 @@
 import { createBrowserClient } from "@supabase/ssr";
 
-import { getClientEnv } from "@/env/client";
+import { getClientEnv, isSupabaseConfigured } from "@/env/client";
+import { SupabaseConfigError } from "@/lib/supabase/config";
+
+export { isSupabaseConfigured };
 
 export function createClient() {
-  const env = getClientEnv();
-  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    throw new Error("Supabase is not configured (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY)");
+  if (!isSupabaseConfigured()) {
+    throw new SupabaseConfigError();
   }
-  return createBrowserClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const env = getClientEnv();
+  return createBrowserClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 }

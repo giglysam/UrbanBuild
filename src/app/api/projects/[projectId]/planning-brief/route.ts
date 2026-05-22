@@ -6,7 +6,8 @@ import { requireUserJson } from "@/lib/api/auth-json";
 import { jsonError } from "@/lib/api/http";
 import { logError } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
-import { planningContextSchema, siteAnalysisSchema } from "@/lib/types/planning";
+import { parseAnalysisRunResult } from "@/lib/analysis/parse-analysis-run";
+import { planningContextSchema } from "@/lib/types/planning";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -113,22 +114,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     return jsonError("Run a site analysis before generating a planning brief", 400);
   }
 
-  const raw = run.result as {
-    analysis?: unknown;
-    indicators?: Record<string, number | string>;
-  };
-  const analysisParsed = siteAnalysisSchema.safeParse(raw.analysis);
-  const indicators =
-    raw.indicators && typeof raw.indicators === "object"
-      ? raw.indicators
-      : analysisParsed.success
-        ? analysisParsed.data.indicators
-        : {};
+  const parsedRun = parseAnalysisRunResult(run.result);
+  const indicators = parsedRun?.indicators ?? {};
 
   try {
     const doc = await generatePlanningBriefDocument({
       indicators,
-      priorAnalysis: analysisParsed.success ? analysisParsed.data : null,
+      siteAnalysis: parsedRun?.siteAnalysis ?? null,
+      priorAnalysis: parsedRun?.planningNarrative ?? null,
       planningContext,
       editorNotes: parsed.data.editorNotes,
     });

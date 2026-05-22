@@ -30,9 +30,15 @@ export async function POST(req: Request) {
   const { lat, lng, radiusM } = parsed.data;
   try {
     const overpass = await fetchOverpassContext(lat, lng, radiusM);
-    const { indicators, featureCollection, stats } = computeIndicators(lat, lng, radiusM, overpass);
+    const { indicators, bufferMetrics, featureCollection, stats } = computeIndicators(
+      lat,
+      lng,
+      radiusM,
+      overpass,
+    );
     return NextResponse.json({
       indicators,
+      bufferMetrics,
       featureCollection,
       stats,
       overpassRemark: overpass.remark ?? null,

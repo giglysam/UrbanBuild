@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { planningContextSchema, scenarioSchema, studyRequestSchema } from "@/lib/types/planning";
+import {
+  designConceptsBundleSchema,
+  planningContextSchema,
+  scenarioSchema,
+  studyRequestSchema,
+} from "@/lib/types/planning";
 
 describe("studyRequestSchema", () => {
   it("accepts valid study request", () => {
@@ -22,6 +27,53 @@ describe("scenarioSchema", () => {
       confidence: "inferred",
     });
     expect(s.name).toBe("A");
+  });
+});
+
+describe("designConceptsBundleSchema", () => {
+  it("parses a minimal concept bundle", () => {
+    const b = designConceptsBundleSchema.parse({
+      siteDiagnosis: "Dense corridor with limited open space.",
+      designPriorities: ["Walkability", "Shade"],
+      subsurfaceCautions: "Assume utilities present; no deep basement without survey.",
+      concepts: [
+        {
+          id: "concept-1",
+          title: "Courtyard block",
+          interventionType: "mixed_use",
+          designConcept: "Mid-rise courtyard framing a shaded plaza.",
+          program: ["Retail", "Housing"],
+          massingLogic: "L-shaped bar around central void.",
+          contextRelationship: "Matches mid-rise neighbors.",
+          materials: ["stone", "timber screens", "glass"],
+          facadeOrLandscapeStrategy: "Deep reveals and planted terraces.",
+          sustainabilityFeatures: ["Cross ventilation", "Rain gardens"],
+          publicRealmStrategy: "Pedestrian plaza with seating.",
+          siteFitRationale: "Fits tight urban grain.",
+          feasibilityAdaptations: "Shallow foundations only.",
+          imagePrompt:
+            "Photorealistic aerial oblique of a Mediterranean mid-rise courtyard block with stone and timber facade, shaded plaza, existing streets visible, late afternoon light, no text.",
+        },
+        {
+          id: "concept-2",
+          title: "Green connector",
+          interventionType: "green_space",
+          designConcept: "Linear park linking two arterials.",
+          program: ["Park", "Playground"],
+          massingLogic: "Open corridor with tree alleys.",
+          contextRelationship: "Softens hard edges.",
+          materials: ["gravel paths", "native planting"],
+          facadeOrLandscapeStrategy: "Layered planting and permeable paving.",
+          sustainabilityFeatures: ["Bioswales"],
+          publicRealmStrategy: "Continuous shaded path.",
+          siteFitRationale: "Uses underused verge.",
+          feasibilityAdaptations: "Avoid deep planting over utility easement.",
+          imagePrompt:
+            "Eye-level photorealistic view along a shaded urban linear park with native trees, stone paths, surrounding buildings, warm Mediterranean light, no text.",
+        },
+      ],
+    });
+    expect(b.concepts).toHaveLength(2);
   });
 });
 

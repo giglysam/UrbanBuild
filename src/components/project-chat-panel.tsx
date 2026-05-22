@@ -3,6 +3,8 @@
 import { Loader2, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { ChatMessageContent } from "@/components/chat-message-content";
+import { useChatAutoScroll } from "@/hooks/use-chat-auto-scroll";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,7 +30,7 @@ export function ProjectChatPanel({ projectId }: { projectId: string }) {
       clientId: `welcome-${projectId}`,
       role: "assistant",
       content:
-        "Ask about walkability, scenarios, or briefs for this project. Responses use your latest saved analysis when available.",
+        "Ask about this project. Suggestions use ## and ### headings with bullets—one idea per section.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -36,6 +38,10 @@ export function ProjectChatPanel({ projectId }: { projectId: string }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   /** True after the user sends (or edits) locally; blocks initial history from overwriting in-flight UI. */
   const localEditsRef = useRef(false);
+
+  const { scrollRootRef, messagesEndRef, scrollOnSend } = useChatAutoScroll([messages, loading], {
+    isLoading: loading,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -100,6 +106,7 @@ export function ProjectChatPanel({ projectId }: { projectId: string }) {
     const trimmed = input.trim();
     if (!trimmed) return;
     localEditsRef.current = true;
+    scrollOnSend();
     const next = [...messages, { role: "user" as const, content: trimmed, clientId: newClientId() }];
     setMessages(next);
     setInput("");
@@ -110,10 +117,7 @@ export function ProjectChatPanel({ projectId }: { projectId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           threadId: threadId ?? undefined,
-          messages: [...next.filter((m) => m.role === "user" || m.role === "assistant")].map((m) => ({
-            role: m.role as "user" | "assistant",
-            content: m.content,
-          })),
+          message: trimmed,
         }),
       });
       const data = (await res.json()) as { reply?: string; threadId?: string; error?: string };
@@ -137,36 +141,60 @@ export function ProjectChatPanel({ projectId }: { projectId: string }) {
   }
 
   return (
-    <Card className="flex max-h-[min(80vh,720px)] flex-col">
+    <Card className="flex max-h-[min(80vh,720px)] min-h-0 flex-col">
       <CardHeader>
         <CardTitle className="text-base">Planning assistant</CardTitle>
-        <CardDescription>Project-aware chat with persisted history.</CardDescription>
+        <CardDescription>
+          Project-aware chat with saved history. The assistant also learns your tastes over time — see Your profile in
+          the sidebar.
+        </CardDescription>
         {loadError ? (
           <p className="text-sm text-destructive" role="alert">
             {loadError}
           </p>
         ) : null}
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-3">
-        <ScrollArea className="min-h-[280px] flex-1 rounded-md border p-3">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+        <ScrollArea ref={scrollRootRef} className="min-h-0 flex-1 rounded-md border p-3">
           <ul className="space-y-3 text-sm">
             {messages.map((m) => (
               <li
                 key={m.id ?? m.clientId}
                 className={m.role === "user" ? "ml-8 text-right" : "mr-8"}
               >
-                <span className="inline-block rounded-lg bg-muted px-3 py-2 text-left">{m.content}</span>
+                <span className="inline-block max-w-full rounded-lg bg-muted px-3 py-2 text-left">
+                  {m.role === "assistant" ? (
+                    <ChatMessageContent content={m.content} />
+                  ) : (
+                    m.content
+                  )}
+                </span>
               </li>
             ))}
+            {loading ? (
+              <li className="mr-8 flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                Thinking…
+              </li>
+            ) : null}
+            <li aria-hidden className="h-0">
+              <div ref={messagesEndRef} />
+            </li>
           </ul>
         </ScrollArea>
-        <div className="flex gap-2">
+        <div className="relative z-10 flex shrink-0 gap-2">
           <Input
+            id="project-chat-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask a follow-up…"
+            disabled={loading}
+            autoComplete="off"
             onKeyDown={(e) => {
-              if (e.key === "Enter") void send();
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send();
+              }
             }}
           />
           <Button type="button" onClick={() => void send()} disabled={loading}>

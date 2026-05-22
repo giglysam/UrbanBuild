@@ -2,24 +2,33 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Home, LayoutDashboard, LogOut, Plus } from "lucide-react";
+import { Building2, Home, LayoutDashboard, LogOut, Plus, UserCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 const nav = [
   { href: "/", label: "Home", icon: Home },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/projects/new", label: "New project", icon: Plus },
+  { href: "/preferences", label: "Your profile", icon: UserCircle },
 ];
 
-export function AppSidebar({ email }: { email?: string }) {
+export function AppSidebar({
+  email,
+  supabaseEnabled = true,
+}: {
+  email?: string;
+  supabaseEnabled?: boolean;
+}) {
   const pathname = usePathname();
 
   async function signOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    if (isSupabaseConfigured()) {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    }
     window.location.href = "/login";
   }
 
@@ -36,12 +45,16 @@ export function AppSidebar({ email }: { email?: string }) {
         {nav.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.href;
+          const needsSupabase = item.href !== "/";
+          const disabled = needsSupabase && !supabaseEnabled;
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={disabled ? "#" : item.href}
+              aria-disabled={disabled}
               className={cn(
                 "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                disabled && "pointer-events-none opacity-50",
                 active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
@@ -52,7 +65,7 @@ export function AppSidebar({ email }: { email?: string }) {
         })}
       </nav>
       <div className="border-t p-3 text-xs text-muted-foreground">
-        <div className="mb-2 truncate">{email ?? "Signed in"}</div>
+        <div className="mb-2 truncate">{supabaseEnabled ? (email ?? "Signed in") : "Supabase not configured"}</div>
         <Button type="button" variant="outline" size="sm" className="w-full gap-2" onClick={() => void signOut()}>
           <LogOut className="size-3.5" aria-hidden />
           Sign out

@@ -11,12 +11,16 @@ const serverEnvSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().optional(),
+  /** Image model for concept visuals (default dall-e-3). */
+  OPENAI_IMAGE_MODEL: z.string().optional(),
   OVERPASS_API_URL: z.string().url().optional(),
   CREATED_CHAT_API_URL: z.string().url().optional(),
   /** Max upload bytes for project files (default 15MB). */
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().optional(),
   /** Feature flag JSON or simple keys — optional. */
   FEATURE_FLAGS: z.string().optional(),
+  /** Referer header for AUB ICIL MapServer (defaults to Beirut Urban Lab hub). */
+  BEIRUT_URBAN_LAB_REFERER: z.string().url().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -31,10 +35,12 @@ function readServerEnv(): ServerEnv {
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || undefined,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY || undefined,
     OPENAI_MODEL: process.env.OPENAI_MODEL || undefined,
+    OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL || undefined,
     OVERPASS_API_URL: process.env.OVERPASS_API_URL || undefined,
     CREATED_CHAT_API_URL: process.env.CREATED_CHAT_API_URL || undefined,
     MAX_UPLOAD_BYTES: process.env.MAX_UPLOAD_BYTES || undefined,
     FEATURE_FLAGS: process.env.FEATURE_FLAGS || undefined,
+    BEIRUT_URBAN_LAB_REFERER: process.env.BEIRUT_URBAN_LAB_REFERER || undefined,
   });
 }
 
@@ -48,7 +54,9 @@ export function getServerEnv(): ServerEnv {
   return cached;
 }
 
+import { hasSupabasePublicEnv } from "@/lib/supabase/config";
+
 export function isSupabaseConfigured(): boolean {
   const e = getServerEnv();
-  return Boolean(e.NEXT_PUBLIC_SUPABASE_URL && e.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  return hasSupabasePublicEnv(e.NEXT_PUBLIC_SUPABASE_URL, e.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }

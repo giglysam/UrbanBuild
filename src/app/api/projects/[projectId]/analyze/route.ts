@@ -4,6 +4,7 @@ import { jsonError } from "@/lib/api/http";
 import { logError, logInfo, logWarn } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
 import { planningContextSchema, planningModuleIdSchema, type Scenario } from "@/lib/types/planning";
+import { projectTypeIdSchema } from "@/lib/types/site-feasibility";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -18,6 +19,8 @@ async function assertOwner(supabase: Awaited<ReturnType<typeof createClient>>, u
 
 const analyzePostBody = z.object({
   moduleFocus: planningModuleIdSchema.optional(),
+  projectType: projectTypeIdSchema.optional(),
+  customProjectDescription: z.string().max(500).optional(),
 });
 
 export async function POST(req: Request, ctx: { params: Promise<{ projectId: string }> }) {
@@ -31,6 +34,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   if (gate === "forbidden") return jsonError("Forbidden", 403);
 
   let moduleFocus: z.infer<typeof planningModuleIdSchema> | undefined;
+  let projectType: z.infer<typeof projectTypeIdSchema> = "mixed_use_development";
+  let customProjectDescription: string | undefined;
   const contentType = req.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
     try {
@@ -38,6 +43,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
       const parsed = analyzePostBody.safeParse(raw);
       if (parsed.success) {
         moduleFocus = parsed.data.moduleFocus;
+        if (parsed.data.projectType) projectType = parsed.data.projectType;
+        customProjectDescription = parsed.data.customProjectDescription;
       }
     } catch {
       /* ignore empty body */
@@ -70,6 +77,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     boundaryGeojson: site.boundary_geojson ?? undefined,
     planningContext,
     moduleFocus: moduleFocus ?? "all",
+    projectType,
+    customProjectDescription,
+    placeLabel: site.label ?? undefined,
   };
 
   const { data: runRow, error: runInsertErr } = await supabase
@@ -93,9 +103,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     const out = await runSiteAnalysisPipeline(input);
     const resultPayload = {
       indicators: out.indicators,
+      bufferMetrics: out.bufferMetrics,
       stats: out.stats,
       featureCollection: out.featureCollection,
-      analysis: out.analysis,
+      siteAnalysis: out.siteAnalysis,
+      beirutUrbanLab: out.beirutUrbanLab,
+      planningNarrative: out.planningNarrative,
+      analysis: out.planningNarrative,
     };
 
     const { error: upErr } = await supabase
@@ -119,7 +133,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
       return jsonError("Analysis saved but failed to refresh scenarios for this project", 500);
     }
 
-    const scenarios: Scenario[] = out.analysis.scenarios;
+    const scenarios: Scenario[] = out.planningNarrative?.scenarios ?? [];
     if (scenarios.length > 0) {
       const rows = scenarios.map((s) => ({
         project_id: projectId,

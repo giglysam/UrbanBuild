@@ -27,3 +27,10 @@ export function getClientEnv(): ClientEnv {
   }
   return cached;
 }
+
+import { hasSupabasePublicEnv } from "@/lib/supabase/config";
+
+export function isSupabaseConfigured(): boolean {
+  const e = getClientEnv();
+  return hasSupabasePublicEnv(e.NEXT_PUBLIC_SUPABASE_URL, e.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}

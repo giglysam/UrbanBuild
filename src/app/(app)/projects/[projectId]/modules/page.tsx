@@ -1,6 +1,7 @@
 import { ProjectModulesWorkspace } from "@/components/project-modules-workspace";
 import { createClient } from "@/lib/supabase/server";
-import { planningContextSchema, siteAnalysisSchema } from "@/lib/types/planning";
+import { parseAnalysisRunResult } from "@/lib/analysis/parse-analysis-run";
+import { planningContextSchema } from "@/lib/types/planning";
 
 export default async function ProjectModulesPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
@@ -20,17 +21,9 @@ export default async function ProjectModulesPage({ params }: { params: Promise<{
     .limit(1)
     .maybeSingle();
 
-  const rawResult = run?.result as
-    | {
-        indicators?: Record<string, number | string>;
-        analysis?: unknown;
-      }
-    | null
-    | undefined;
-
-  const latestIndicators = rawResult?.indicators ?? null;
-  const analysisParsed = rawResult?.analysis ? siteAnalysisSchema.safeParse(rawResult.analysis) : null;
-  const latestModules = analysisParsed?.success && analysisParsed.data.modules ? analysisParsed.data.modules : null;
+  const parsedRun = parseAnalysisRunResult(run?.result);
+  const latestIndicators = parsedRun?.indicators ?? null;
+  const latestModules = parsedRun?.planningNarrative?.modules ?? null;
 
   return (
     <ProjectModulesWorkspace

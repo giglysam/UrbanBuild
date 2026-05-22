@@ -1,13 +1,14 @@
 # UrbanBuild
 
-Production-oriented **AI-assisted urban planning** platform: interactive sites on a map, OpenStreetMap context via Overpass, structured analysis and planning briefs, scenario comparison, project-scoped chat, file storage, and exports. Built with **Next.js 16** (App Router), **Supabase** (Auth, Postgres, Storage), **Mapbox**, and **OpenAI**.
+Production-oriented **AI pre-feasibility** workspace for engineers, architects, planners, and developers: pin a site, run OSM/BBED site intelligence, score preliminary project readiness (0–100), list missing official data and required studies, and chat with a site-grounded assistant—not a generic city planning bot. Built with **Next.js 16** (App Router), **Supabase** (Auth, Postgres, Storage), **Mapbox**, and **OpenAI**.
 
 ## Product overview
 
-- **Marketing & demo**: `/` landing, `/demo` standalone map analysis (no account).
+- **Marketing & demo**: `/` landing, `/demo` standalone map + readiness analysis (no account).
 - **Auth**: email/password via Supabase (`/login`, `/signup`, `/forgot-password`, `/auth/callback`).
 - **Workspace**: `/dashboard`, projects under `/projects/[id]` with tabs (Overview, Site, Analysis, Planning brief, Scenarios, Chat, Files, Reports, Settings).
-- **Trust & safety**: insights tagged with confidence; no fabricated official zoning — OSM/heuristic data is labelled appropriately in prompts.
+- **Pre-feasibility output**: seven-section readiness assessment (site conditions, regulatory gaps, scope, utilities, risks, missing data/studies, final recommendation) grounded on pinned coordinates, study radius, OSM/Overpass, and Beirut Urban Lab / BBED when available.
+- **Trust & safety**: separates known open data from missing official zoning, parcels, utilities, and approvals; never implies legal permit feasibility.
 
 ## Architecture
 
@@ -41,6 +42,9 @@ Managed in Supabase: `profiles`, `organizations` / `organization_members` (teams
 | POST | `/api/site-data` | OSM indicators only (no AI) |
 | POST | `/api/analyze` | Legacy anonymous analysis (no persistence) |
 | POST | `/api/chat` | Stateless chat (Created + OpenAI fallback) |
+| POST | `/api/design/concepts` | Generate 2–4 site-grounded design concepts after analysis |
+| POST | `/api/generate-image` | OpenAI Images — site-specific concept visualization (base64 data URL) |
+| POST | `/api/design/concept-image` | Alias of `/api/generate-image` |
 | GET/POST | `/api/projects` | List / create projects |
 | GET/PATCH/DELETE | `/api/projects/[id]` | Project CRUD |
 | PATCH | `/api/projects/[id]/site` | Site center, radius, boundary |
@@ -51,7 +55,9 @@ Managed in Supabase: `profiles`, `organizations` / `organization_members` (teams
 | POST | `/api/projects/[id]/scenarios/[sid]/prefer` | Mark preferred scenario |
 | GET/POST | `/api/projects/[id]/files` | List / register uploaded file metadata |
 | DELETE | `/api/projects/[id]/files/[fid]` | Remove file + storage object |
-| GET/POST | `/api/projects/[id]/chat` | List threads/messages or send project-aware chat |
+| GET/POST | `/api/projects/[id]/chat` | List threads/messages or send project-aware chat (server loads full thread history) |
+| GET/PATCH | `/api/user/profile` | Planner profile — learned tastes + your notes |
+| POST | `/api/projects/save-workspace` | Save demo workspace as a new project (site, analysis, concepts, chat) |
 | GET | `/api/projects/[id]/export` | JSON snapshot download |
 | GET | `/api/projects/[id]/reports/planning-brief` | Planning brief PDF |
 | GET | `/api/projects/[id]/reports/mapbox-static` | Static map PNG centered on saved site |
@@ -93,6 +99,8 @@ npm run dev
 ### Environment variables
 
 See **[.env.example](.env.example)**. Required for the full app:
+
+**Security:** Keep real keys only in **`.env.local`** on your machine. That file is in **`.gitignore`** and must not be committed. If a Mapbox or OpenAI key was shared in chat, issues, or screenshots, rotate it in the provider dashboard and update `.env.local`.
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NEXT_PUBLIC_MAPBOX_TOKEN`

@@ -22,11 +22,11 @@ const siteUrl = getServerEnv().NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "UrbanBuild — AI-assisted urban planning",
+    default: "UrbanBuild — AI pre-feasibility for development sites",
     template: "%s · UrbanBuild",
   },
   description:
-    "Urban planning and design workspace: OSM site intelligence, structured AI analysis, planning briefs, scenarios, and exports.",
+    "Pre-project site intelligence for engineers, architects, planners, and developers: OSM context, readiness scoring, required studies, and grounded AI chat.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

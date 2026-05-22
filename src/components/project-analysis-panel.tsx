@@ -4,7 +4,10 @@ import { Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
-import type { SiteAnalysis } from "@/lib/types/planning";
+import type { PlanningNarrative } from "@/lib/types/planning";
+import type { StructuredSiteAnalysis } from "@/lib/types/site-feasibility";
+import { FeasibilitySummaryPanel } from "@/components/feasibility-summary-panel";
+import { logSiteDataDebug } from "@/lib/planning/format-site-data-used";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +23,8 @@ function confidenceVariant(c: string): "default" | "secondary" | "outline" | "mu
 export function ProjectAnalysisPanel({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<SiteAnalysis | null>(null);
+  const [siteAnalysis, setSiteAnalysis] = useState<StructuredSiteAnalysis | null>(null);
+  const [planningNarrative, setPlanningNarrative] = useState<PlanningNarrative | null>(null);
 
   async function run() {
     setLoading(true);
@@ -31,9 +35,18 @@ export function ProjectAnalysisPanel({ projectId }: { projectId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ moduleFocus: "all" }),
       });
-      const data = (await res.json()) as { analysis?: SiteAnalysis; error?: string };
+      const data = (await res.json()) as {
+        siteAnalysis?: StructuredSiteAnalysis;
+        planningNarrative?: PlanningNarrative;
+        analysis?: PlanningNarrative;
+        error?: string;
+      };
       if (!res.ok) throw new Error(data.error ?? "Analysis failed");
-      if (data.analysis) setAnalysis(data.analysis);
+      if (data.siteAnalysis) {
+        setSiteAnalysis(data.siteAnalysis);
+        logSiteDataDebug(data.siteAnalysis, "UrbanBuild project analyze");
+      }
+      setPlanningNarrative(data.planningNarrative ?? data.analysis ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed");
     } finally {
@@ -60,7 +73,9 @@ export function ProjectAnalysisPanel({ projectId }: { projectId: string }) {
         </CardContent>
       </Card>
 
-      {analysis ? (
+      <FeasibilitySummaryPanel siteAnalysis={siteAnalysis} />
+
+      {planningNarrative ? (
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
@@ -69,7 +84,7 @@ export function ProjectAnalysisPanel({ projectId }: { projectId: string }) {
             <CardContent>
               <ScrollArea className="h-[320px] pr-4">
                 <ul className="space-y-4">
-                  {analysis.insights.map((ins, i) => (
+                  {planningNarrative.insights.map((ins, i) => (
                     <li key={i} className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">{ins.title}</span>
@@ -91,7 +106,7 @@ export function ProjectAnalysisPanel({ projectId }: { projectId: string }) {
             <CardContent>
               <ScrollArea className="h-[320px] pr-4">
                 <ul className="space-y-4">
-                  {analysis.scenarios.map((s, i) => (
+                  {planningNarrative.scenarios.map((s, i) => (
                     <li key={i}>
                       <div className="font-medium">{s.name}</div>
                       <p className="text-sm text-muted-foreground">{s.summary}</p>
@@ -104,7 +119,7 @@ export function ProjectAnalysisPanel({ projectId }: { projectId: string }) {
         </div>
       ) : null}
 
-      {analysis?.modules ? (
+      {planningNarrative?.modules ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Planning modules (summary)</CardTitle>
@@ -119,23 +134,23 @@ export function ProjectAnalysisPanel({ projectId }: { projectId: string }) {
           <CardContent className="grid gap-3 text-sm md:grid-cols-2">
             <p>
               <span className="font-medium">Land use: </span>
-              {analysis.modules.landUse.summary}
+              {planningNarrative.modules.landUse.summary}
             </p>
             <p>
               <span className="font-medium">Traffic & transit: </span>
-              {analysis.modules.trafficTransit.summary}
+              {planningNarrative.modules.trafficTransit.summary}
             </p>
             <p>
               <span className="font-medium">Green space: </span>
-              {analysis.modules.greenSpace.summary}
+              {planningNarrative.modules.greenSpace.summary}
             </p>
             <p>
               <span className="font-medium">Budget: </span>
-              {analysis.modules.budget.summary}
+              {planningNarrative.modules.budget.summary}
             </p>
             <p className="md:col-span-2">
               <span className="font-medium">Risk: </span>
-              {analysis.modules.risk.summary}
+              {planningNarrative.modules.risk.summary}
             </p>
           </CardContent>
         </Card>

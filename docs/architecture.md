@@ -2,7 +2,7 @@
 
 ## Overview
 
-UrbanBuild is a Next.js App Router application: marketing and auth routes are public; the authenticated **app** area lists **projects** and opens a **project workspace** with site map, OSM-backed analysis, planning briefs, scenarios, chat, files, and exports.
+UrbanBuild is a Next.js App Router application for **AI pre-feasibility**: marketing and auth routes are public; the authenticated **app** area lists **projects** and opens a workspace with site map, readiness scoring, required-study checklists, planning briefs, scenarios, site-grounded chat, files, and exports.
 
 External services: **Supabase** (Postgres, Auth, Storage), **Mapbox** (map + optional geocoding), **Overpass** (OpenStreetMap), **OpenAI** (structured analysis and chat fallback), optional **Created** chat upstream.
 
@@ -28,10 +28,13 @@ External services: **Supabase** (Postgres, Auth, Storage), **Mapbox** (map + opt
 
 ## Data flow (analysis)
 
-1. Client sends study parameters (center, radius, optional polygon) to analysis API or project-scoped analysis route.
-2. Server fetches Overpass data, runs `computeIndicators`, optionally merges polygon context.
-3. OpenAI returns structured `SiteAnalysis` (Zod-validated).
-4. Results persist in `analysis_runs` and drive UI; planning briefs and scenarios can be versioned in dedicated tables.
+1. Client pins a site (lat/lng, default **400 m** radius), selects a **project type**, and calls `/api/analyze` or project-scoped analyze.
+2. Server runs **three batched Overpass queries** (buildings/roads/transit, green/landuse, amenities/shops/offices), classifies into **10 OSM layers** (`src/lib/geo/osm-categories.ts`), then `computeIndicators` and `extractSiteOsmSignals` feed **`StructuredSiteAnalysis`** (`src/lib/types/site-feasibility.ts`).
+3. In parallel, **Beirut Urban Lab / BBED 2024** ArcGIS FeatureServer (`services3.arcgis.com/.../BBBED_2024_DataSharing`) and optional **AUB ICIL** MapServer layers are queried for the same study buffer (`src/lib/services/beirut-urban-lab/`).
+4. **`runProjectFeasibility`** applies rule-based scoring per project type (verdict 0–100, final recommendation, constraints, canonical missing data and required studies); optional OpenAI pass refines narrative only.
+5. Chat and briefs use **`pre-project-readiness.ts`** — seven-section project readiness assessment (not generic urban chat).
+6. Optional **`PlanningNarrative`** (insights, modules, scenarios) is generated with the structured object injected into the prompt so outputs stay site-grounded.
+7. Results persist in `analysis_runs` (`siteAnalysis` + `planningNarrative` + `beirutUrbanLab`); readiness PDF via `POST /api/feasibility-report`. Standalone BBED fetch: `POST /api/beirut-urban-lab/context`.
 
 ## Security
 

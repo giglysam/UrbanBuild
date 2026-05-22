@@ -21,9 +21,13 @@ export async function POST(req: Request) {
     const out = await runSiteAnalysisPipeline(parsed.data);
     return NextResponse.json({
       indicators: out.indicators,
+      bufferMetrics: out.bufferMetrics,
       stats: out.stats,
       featureCollection: out.featureCollection,
-      analysis: out.analysis,
+      siteAnalysis: out.siteAnalysis,
+      beirutUrbanLab: out.beirutUrbanLab,
+      planningNarrative: out.planningNarrative,
+      analysis: out.planningNarrative,
       overpassRemark: out.overpassRemark,
     });
   } catch (e) {
